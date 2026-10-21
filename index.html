@@ -128,6 +128,8 @@
   }
   .tiny { padding: 6px 10px; font-size: 13px; }
   [hidden] { display: none !important; }
+  .notehint { font-size: 12.5px; color: var(--sub); margin: 6px auto 0; max-width: 34em; line-height: 1.6; }
+  .notehint:empty { display: none; }
 
   /* ---- スマホ向け ---- */
   #miniBtn, .minitoggle { display: none !important; }
@@ -309,6 +311,11 @@
     <label class="chk"><input type="checkbox" id="glowChk" checked> 目盛りの光のにじみを表示する</label>
     <label class="chk"><input type="checkbox" id="soundChk" checked> 終了時に音を鳴らす</label>
   </div>
+  <div class="row">
+    <label class="chk"><input type="checkbox" id="notifyChk"> 通知欄に残り時間と進行度を表示する</label>
+    <button class="tiny" id="notifyTest" hidden>通知を試す</button>
+  </div>
+  <div class="notehint" id="notifyHint" role="status"></div>
 </div>
 
 <script>
@@ -339,6 +346,7 @@
   var startBtn = $('startBtn'), resetBtn = $('resetBtn'), slider = $('slider');
   var setLabel = $('setLabel'), segInfo = $('segInfo'), maxLabel = $('maxLabel');
   var segs = [], audioCtx = null, timerId = null;
+  var notif = null;   // 通知の仕組み（下で作成）
 
   // ---- 保存と読み込み ----
   function save() {
@@ -378,8 +386,8 @@
     if (s === 0) return m + '分';
     return m + '分' + s + '秒';
   }
-  function autoColor() {
-    var ratio = state.remainSec / state.setSec;
+  function autoColor(rs) {
+    var ratio = (rs == null ? state.remainSec : rs) / state.setSec;
     if (ratio > 0.5) return state.stageColors[0];
     if (ratio > 0.25) return state.stageColors[1];
     return state.stageColors[2];
@@ -393,15 +401,22 @@
     segs.push(d);
   }
 
+  // 残り秒数から、点灯する目盛りの数と色を決める（画面表示と通知で共通）
+  function litCount(rs) {
+    var segSec = state.setSec / N;
+    if (state.done) return N;
+    if (rs <= 0) return 0;
+    return Math.min(N, Math.ceil(rs / segSec - 1e-9));
+  }
+  function litColorFor(rs) {
+    return state.done ? (state.auto ? state.stageColors[2] : state.color) : (state.auto ? autoColor(rs) : state.color);
+  }
+
   // ---- 描画 ----
   function render() {
     var segSec = state.setSec / N;
-    var lit;
-    if (state.done) lit = N;
-    else if (state.remainSec <= 0) lit = 0;
-    else lit = Math.min(N, Math.ceil(state.remainSec / segSec - 1e-9));
-
-    var litColor = state.done ? (state.auto ? state.stageColors[2] : state.color) : (state.auto ? autoColor() : state.color);
+    var lit = litCount(state.remainSec);
+    var litColor = litColorFor(state.remainSec);
     document.documentElement.style.setProperty('--lit', litColor);
     document.documentElement.style.setProperty('--accent', state.auto ? '#2f7be0' : state.color);
 
@@ -439,6 +454,7 @@
     // 計測中は時間の変更ができない
     var locked = document.querySelectorAll('.adj, .preset, #slider');
     for (var n = 0; n < locked.length; n++) locked[n].disabled = state.running;
+    if (notif) notif.sync(false);
   }
 
   // ---- 音 ----
@@ -744,6 +760,189 @@
     applyTheme();
   });
   if (darkQuery && darkQuery.addEventListener) darkQuery.addEventListener('change', applyTheme);
+
+
+  // ---- 通知（Android Chrome：Service Worker の showNotification を使用） ----
+  notif = (function () {
+    var TAG = 'vtimer-main', KEY = 'vtimerNotify';
+    var SLOW = 15000, FAST = 5000;   // 画面を離れている間の更新間隔（残り2分超／2分以下）。省電力のため控えめにする
+    var enabled = false, reg = null, shown = false;
+    var lastSig = '', lastTsig = '', lastAt = 0, busy = false, queued = null;
+
+    function supported() {
+      return ('Notification' in window) && ('serviceWorker' in navigator) && window.isSecureContext && location.protocol !== 'file:';
+    }
+    function getReg() {
+      if (reg) return Promise.resolve(reg);
+      return Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise(function (_, rej) { setTimeout(function () { rej(new Error('sw timeout')); }, 5000); })
+      ]).then(function (r) { reg = r; return r; });
+    }
+
+    // タイマー本体と同じ計算（endAt と Date.now() が基準）で、今の状態を求める
+    function snap() {
+      var remain = state.done ? 0 : (state.running ? Math.max(0, (state.endAt - Date.now()) / 1000) : state.remainSec);
+      var status = state.done ? 'done' : state.running ? 'running'
+        : (state.remainSec < state.setSec && state.remainSec > 0 ? 'paused' : 'idle');
+      return { remain: remain, status: status, lit: litCount(remain), color: litColorFor(remain) };
+    }
+    function hhmm(t) {
+      var d = new Date(t);
+      return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
+    }
+    // 画像が使えない場合の代わりに、本文で色付きブロックを使う（色相から近い絵文字を選ぶ）
+    function blockFor(hex) {
+      var r = parseInt(hex.substr(1, 2), 16) / 255, g = parseInt(hex.substr(3, 2), 16) / 255, b = parseInt(hex.substr(5, 2), 16) / 255;
+      var mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, hue = 0;
+      if (d > 0) {
+        if (mx === r) hue = 60 * (((g - b) / d + 6) % 6);
+        else if (mx === g) hue = 60 * ((b - r) / d + 2);
+        else hue = 60 * ((r - g) / d + 4);
+      }
+      if (hue < 15 || hue >= 320) return '🟥';   // 🟥
+      if (hue < 40) return '🟧';                  // 🟧
+      if (hue < 70) return '🟨';                  // 🟨
+      if (hue < 175) return '🟩';                 // 🟩
+      if (hue < 255) return '🟦';                 // 🟦
+      return '🟪';                                // 🟪
+    }
+    function blocks(s) {
+      var on = blockFor(s.color), off = isDark() ? '⬛' : '⬜';   // ⬛ / ⬜
+      var out = '';
+      for (var i = 0; i < N; i++) out += i < s.lit ? on : off;
+      return out;
+    }
+    function bodyText(s) {
+      var t = fmt(s.remain), line1, line3;
+      if (s.status === 'running') { line1 = '▶ 計測中　残り ' + t; line3 = '終了予定 ' + hhmm(state.endAt) + '（' + state.setMin + '分タイマー）'; }
+      else if (s.status === 'paused') { line1 = '⏸ 一時停止中　残り ' + t; line3 = state.setMin + '分タイマー'; }
+      else if (s.status === 'done') { line1 = '⏰ 時間です（終了）'; line3 = state.setMin + '分タイマーが終わりました'; }
+      else { line1 = '⏹ 待機中　' + t; line3 = state.setMin + '分タイマー'; }
+      return line1 + '\n' + blocks(s) + '\n' + line3;
+    }
+
+    // 進行度の画像（Canvasで描いたPNG）。通知にはHTML/CSSを使えないので、画像として渡す
+    function makeImage(s) {
+      var c = document.createElement('canvas');
+      c.width = 800; c.height = 400;
+      var g = c.getContext('2d');
+      var cs = getComputedStyle(document.documentElement);
+      var v = function (n, d) { return (cs.getPropertyValue(n) || '').trim() || d; };
+      var panel = v('--panel', '#ffffff'), off = v('--off', '#e2dfd8'), text = v('--text', '#2b2b2b'), sub = v('--sub', '#777777');
+      g.fillStyle = panel; g.fillRect(0, 0, 800, 400);
+      g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      var fam = '"Hiragino Sans","Noto Sans CJK JP","Noto Sans JP",sans-serif';
+      var label = { running: '計測中', paused: '一時停止中', done: '時間です', idle: '待機中' }[s.status];
+      g.fillStyle = sub; g.font = '600 34px ' + fam; g.fillText(label, 400, 62);
+      g.fillStyle = text; g.font = '700 128px ' + fam; g.fillText(fmt(s.remain), 400, 192);
+      var x0 = 40, w = 720, gap = 6, tw = (w - gap * (N - 1)) / N, y = 236, th = 92;
+      for (var i = 0; i < N; i++) {
+        g.fillStyle = i < s.lit ? s.color : off;
+        var x = x0 + i * (tw + gap), r = 7;
+        g.beginPath();
+        g.moveTo(x + r, y); g.lineTo(x + tw - r, y); g.quadraticCurveTo(x + tw, y, x + tw, y + r);
+        g.lineTo(x + tw, y + th - r); g.quadraticCurveTo(x + tw, y + th, x + tw - r, y + th);
+        g.lineTo(x + r, y + th); g.quadraticCurveTo(x, y + th, x, y + th - r);
+        g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.fill();
+      }
+      g.fillStyle = sub; g.font = '500 30px ' + fam;
+      g.fillText(s.status === 'running' ? '終了予定 ' + hhmm(state.endAt) + '　/　設定 ' + state.setMin + '分' : '設定 ' + state.setMin + '分', 400, 372);
+      return c.toDataURL('image/png');
+    }
+
+    function post(s, structural) {
+      if (busy) { queued = [s, structural]; return; }
+      busy = true;
+      var isDone = s.status === 'done';
+      getReg().then(function (r) {
+        return r.getNotifications({ tag: TAG }).then(function (list) {
+          // 利用者が通知を消したあとは、操作（開始・一時停止など）があるまで勝手に出し直さない
+          if (!structural && !list.length) return;
+          var opts = {
+            body: bodyText(s), tag: TAG, lang: 'ja', icon: 'icon-192.png', badge: 'badge-96.png',
+            renotify: isDone, silent: !isDone, timestamp: Date.now(), data: { kind: s.status }
+          };
+          if (isDone) opts.vibrate = [400, 200, 400, 200, 400];
+          try { if ('image' in Notification.prototype) opts.image = makeImage(s); } catch (e) {}
+          shown = true;
+          return r.showNotification('ビジュアルタイマー', opts);
+        });
+      }).catch(function () {}).then(function () {
+        busy = false;
+        if (queued) { var q = queued; queued = null; post(q[0], q[1]); }
+      });
+    }
+
+    function sync(force) {
+      if (!enabled) return;
+      var s = snap();
+      if (s.status === 'idle' && !shown) return;   // 一度も開始していない待機中は出さない（「通知を試す」だけ例外）
+      var sig = [s.status, state.setMin, s.color, isDark() ? 1 : 0, state.stageColors.join()].join('|');
+      var tsig = fmt(s.remain) + '|' + s.lit;
+      var structural = !!force || sig !== lastSig;
+      if (!structural) {
+        if (s.status !== 'running') return;          // 止まっている間は表示が変わらない
+        if (document.visibilityState !== 'hidden') return;   // 画面を見ている間は通知を更新しない（省電力）
+        if (Date.now() - lastAt < (s.remain > 120 ? SLOW : FAST)) return;
+        if (tsig === lastTsig) return;
+      }
+      lastSig = sig; lastTsig = tsig; lastAt = Date.now();
+      post(s, structural);
+    }
+
+    // ---- 設定画面 ----
+    var chk = $('notifyChk'), hint = $('notifyHint'), testBtn = $('notifyTest');
+    function refreshUI() {
+      var ok = supported();
+      var perm = ok ? Notification.permission : 'unsupported';
+      if (enabled && perm !== 'granted') enabled = false;   // 許可が取り消された
+      chk.checked = enabled;
+      testBtn.hidden = !enabled;
+      if (!ok) {
+        hint.textContent = 'この環境では通知を使えません。AndroidのChromeで、https のアドレス（公開したページ）から開いてください。';
+      } else if (perm === 'denied') {
+        hint.textContent = '通知がブロックされています。Chromeの「︙」→「設定」→「サイトの設定」→「通知」でこのサイトを許可するか、ホーム画面のアイコンを長押しして「アプリ情報」→「通知」で許可してから、もう一度チェックしてください。';
+      } else if (enabled) {
+        hint.textContent = '有効です。他のアプリを使っている間も、通知欄に残り時間と進行度を表示します。Androidの省電力で更新が遅れることがあるため、終了予定の時刻も表示しています。通知を消すと、次の操作（スタート・一時停止など）までは出し直しません。';
+      } else {
+        hint.textContent = 'チェックすると、通知の許可を求める画面が出ます。';
+      }
+    }
+    function save() { try { localStorage.setItem(KEY, enabled ? '1' : '0'); } catch (e) {} }
+    function enable() { enabled = true; save(); refreshUI(); sync(true); }
+    function disable() {
+      enabled = false; save(); shown = false; lastSig = ''; refreshUI();
+      getReg().then(function (r) { return r.getNotifications({ tag: TAG }); })
+        .then(function (list) { list.forEach(function (n) { n.close(); }); }).catch(function () {});
+    }
+    chk.addEventListener('change', function () {
+      if (!chk.checked) { disable(); return; }
+      if (!supported()) { chk.checked = false; refreshUI(); return; }
+      var p = Notification.permission;
+      if (p === 'granted') enable();
+      else if (p === 'denied') { chk.checked = false; refreshUI(); }
+      else {
+        var done = function (r) { if (r === 'granted') enable(); else { chk.checked = false; refreshUI(); } };
+        try {
+          var pr = Notification.requestPermission(done);   // 古い形式（コールバック）にも対応
+          if (pr && pr.then) pr.then(done);
+        } catch (e) { chk.checked = false; refreshUI(); }
+      }
+    });
+    testBtn.addEventListener('click', function () { shown = true; sync(true); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') sync(true);   // 別のアプリへ移った瞬間に最新へ更新
+    });
+    try {
+      if (supported() && navigator.permissions && navigator.permissions.query) {
+        navigator.permissions.query({ name: 'notifications' }).then(function (p) { p.onchange = refreshUI; }).catch(function () {});
+      }
+      if (supported() && localStorage.getItem(KEY) === '1' && Notification.permission === 'granted') enabled = true;
+    } catch (e) {}
+    refreshUI();
+    return { sync: sync, snap: snap, isEnabled: function () { return enabled; } };
+  })();
 
   // ---- 初期化 ----
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(function () {});
