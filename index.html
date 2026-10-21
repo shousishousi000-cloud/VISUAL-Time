@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f1ea">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>ビジュアルタイマー（横型）</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #ffffff;
+    --text: #2b2b2b;
+    --sub: #777;
+    --off: #e2dfd8;
+    --lit: #2fa862;
+    --accent: #2fa862;
+  }
+  :root { color-scheme: light; }
+  /* 初期状態はOSの設定に従う。ボタンで切り替えたあとは data-theme が優先される */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #1c1c1e; --panel: #2a2a2d; --text: #f0f0f0; --sub: #b4b4ba; --off: #3b3b40; --shadow: rgba(0,0,0,.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #1c1c1e; --panel: #2a2a2d; --text: #f0f0f0; --sub: #b4b4ba; --off: #3b3b40; --shadow: rgba(0,0,0,.55);
+  }
+  * { box-sizing: border-box; }
+  html { height: 100%; }
+  body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+    display: flex;
+    padding: 16px;
+  }
+  .app {
+    margin: auto;
+    position: relative;
+    width: 100%;
+    max-width: 880px;
+    background: var(--panel);
+    border-radius: 24px;
+    padding: 28px 28px 30px;
+    box-shadow: 0 6px 30px var(--shadow, rgba(0,0,0,.12));
+    text-align: center;
+  }
+  .readout {
+    font-size: clamp(56px, 12vw, 112px);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: .04em;
+    font-variant-numeric: tabular-nums;
+  }
+  .bar {
+    position: relative;
+    display: flex;
+    gap: clamp(3px, .7vw, 8px);
+    padding: 14px;
+    margin: 22px 0 6px;
+    background: rgba(128,128,128,.12);
+    border-radius: 18px;
+  }
+  .seg {
+    flex: 1;
+    height: clamp(24px, 5.5vw, 48px);
+    border-radius: 6px;
+    background: var(--off);
+    transition: background .2s, box-shadow .2s;
+  }
+  .seg.on {
+    background: var(--lit);
+    box-shadow: 0 0 10px -1px var(--lit);
+  }
+  .seg.on.cur { animation: cur 1s ease-in-out infinite alternate; }
+  @keyframes cur { from { opacity: 1; } to { opacity: .5; } }
+  .done .seg.on { animation: doneflash .6s ease-in-out infinite alternate; }
+  @keyframes doneflash { from { opacity: 1; } to { opacity: .2; } }
+  .scale {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--sub);
+    padding: 0 6px;
+  }
+  .hint { font-size: 13px; color: var(--sub); min-height: 20px; margin-top: 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; margin-top: 14px; }
+  button {
+    font: inherit;
+    border: 1px solid rgba(128,128,128,.35);
+    background: transparent;
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: rgba(128,128,128,.12); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+    font-weight: 700; min-width: 120px; font-size: 18px; padding: 11px 20px;
+  }
+  button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+  .preset { padding: 6px 12px; font-size: 14px; }
+  .preset.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
+  .adj { min-width: 52px; padding: 6px 10px; font-size: 14px; }
+  .setlabel { font-size: 16px; font-weight: 700; min-width: 64px; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: min(360px, 60vw); accent-color: var(--accent); }
+  .swatch { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid transparent; }
+  .swatch.active { border-color: var(--text); }
+  label.chk { font-size: 14px; color: var(--sub); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  /* ---- 演出オフ・色の設定 ---- */
+  body.noglow .seg.on { box-shadow: none; }
+  body.nofade .seg { transition: none; }
+  body.nofade .seg.on.cur { animation: none; }
+  .stagelabel { font-size: 14px; color: var(--sub); }
+  .stage { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--sub); }
+  .stage input[type=color] {
+    width: 36px; height: 28px; padding: 0; cursor: pointer;
+    border: 1px solid rgba(128,128,128,.35); border-radius: 8px; background: transparent;
+  }
+  .tiny { padding: 6px 10px; font-size: 13px; }
+  [hidden] { display: none !important; }
+
+  /* ---- スマホ向け ---- */
+  #miniBtn, .minitoggle { display: none !important; }
+  body { padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); -webkit-tap-highlight-color: transparent; }
+  button, input[type=range] { touch-action: manipulation; }
+  @media (max-width: 600px) {
+    .app { padding: 20px 12px 24px; border-radius: 20px; }
+    .bar { padding: 10px; gap: 3px; }
+    .seg { height: clamp(34px, 9vw, 48px); }
+    button { padding: 11px 14px; }
+    button.primary { padding: 14px 22px; min-width: 130px; }
+    .preset { padding: 9px 12px; }
+    .adj { min-width: 56px; padding: 10px; }
+    input[type=range] { width: 88%; height: 32px; }
+    label.chk { font-size: 15px; padding: 4px 0; }
+  }
+
+  /* ---- 進行度に応じた色：プリセット＋自由に選ぶ ---- */
+  .colorset { margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(128,128,128,.25); }
+  .cs-title { font-size: 14px; font-weight: 700; }
+  .cs-note { font-size: 12.5px; color: var(--sub); margin-top: 4px; }
+  .pgrid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 12px; }
+  .colorset.dim .pgrid { opacity: .55; }
+  .pcard {
+    display: flex; flex-direction: column; gap: 7px; width: 132px;
+    padding: 10px; border-radius: 14px; text-align: left;
+  }
+  .pstrip { display: flex; gap: 2px; height: 18px; border-radius: 6px; overflow: hidden; }
+  .pstrip i { flex: 1; display: block; }
+  .pname { font-size: 13.5px; font-weight: 700; }
+  .pdesc { font-size: 11.5px; color: var(--sub); line-height: 1.3; }
+  .pcard.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .pcard.active .pname::after { content: " ✓"; }
+  .custombtn { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .cdots { display: inline-flex; gap: 2px; }
+  .cdots i { display: block; width: 12px; height: 12px; border-radius: 3px; }
+  .inuse { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
+  .cpanel {
+    margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(128,128,128,.10);
+    display: flex; flex-wrap: wrap; gap: 10px 16px; justify-content: center; align-items: center;
+  }
+
+  /* ---- バーのみモード（残り時間の数字を隠す） ---- */
+  body.baronly .readout { display: none; }
+  .setbadge { display: none; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  body.baronly .setbadge { display: block; font-size: clamp(30px, 6vw, 56px); margin: 6px 0 16px; }
+  body.mini.baronly .setbadge { font-size: clamp(11px, 6.5vh, 16px); margin: 0 0 min(1.2vh, 3px); }
+  body.baronly:not(.mini) .bar { margin-top: 0; }
+  body.baronly:not(.mini) .seg { height: clamp(36px, 8vw, 70px); }
+  button.toggle.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
+
+  /* ---- 小窓モード（数字とバーだけ表示） ---- */
+  /* ---- 右上のウィンドウ操作（枠なしウィンドウ用） ---- */
+  .winctl { display: none; position: absolute; top: 6px; right: 8px; gap: 4px; z-index: 5; }
+  body.electron .winctl, body.mini .winctl { display: flex; }
+  .winbtn {
+    padding: 0 9px; font-size: 14px; line-height: 22px; border-radius: 8px;
+    opacity: .55; transition: opacity .15s;
+  }
+  .winbtn:hover:not(:disabled) { opacity: 1; }
+  #expandBtn, #minBtn, #closeBtn { display: none; }
+  body.mini #expandBtn { display: block; }
+  body.electron #minBtn, body.electron #closeBtn { display: block; }
+  body.mini .winbtn { opacity: 0; }
+  body.mini .app:hover .winbtn { opacity: .85; }
+  #closeBtn:hover:not(:disabled) { background: #e5484d; border-color: #e5484d; color: #fff; }
+  body.mini { height: 100vh; min-height: 0; overflow: hidden; padding: 6px; }
+  body.mini .app {
+    height: 100%; margin: 0; max-width: none; padding: 8px 12px;
+    border-radius: 14px; box-shadow: none;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  body.mini .row, body.mini .scale, body.mini .hint, body.mini .colorset { display: none; }
+  body.mini .readout { font-size: min(14vw, 26vh); cursor: pointer; }
+  body.mini .bar {
+    padding: min(1.6vw, 3vh); margin: min(2vw, 3vh) 0 0;
+    gap: min(.8vw, 2vh); border-radius: 12px; cursor: pointer;
+  }
+  body.mini .seg { height: min(9vw, 18vh); border-radius: 4px; }
+  body.mini #mainRow { display: flex; margin-top: min(1.6vw, 3vh); gap: min(1vw, 2vh); }
+  body.mini #mainRow button {
+    font-size: clamp(11px, 6.5vh, 20px);
+    padding: clamp(3px, 1.6vh, 10px) clamp(10px, 3vw, 24px);
+    border-radius: 10px; min-width: 0;
+  }
+  body.mini #miniBtn { display: none; }
+  body.mini.baronly .bar { margin: 0; }
+  body.mini.baronly .seg { height: min(11vw, 26vh); }
+
+  /* ---- 小窓：操作ボタンの表示／非表示 ---- */
+  .minitoggle { display: none; }
+  body.mini .minitoggle {
+    display: block; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    z-index: 3; min-width: 0; white-space: nowrap; border-radius: 999px;
+    font-size: clamp(10px, 5.5vh, 13px); line-height: 1.25; padding: .15em .9em;
+    background: var(--panel); color: var(--text); border: 1px solid rgba(128,128,128,.6);
+    cursor: pointer;
+    opacity: 0; visibility: hidden;
+    transition: opacity .12s, visibility 0s .12s;
+  }
+  /* バーの上にカーソルを少し止めたときだけ表示する（0.25秒の間を置く） */
+  body.mini .bar:hover .minitoggle, body.mini .minitoggle:focus-visible {
+    opacity: 1; visibility: visible;
+    transition: opacity .15s .25s, visibility 0s .25s;
+  }
+  body.mini .minitoggle:hover:not(:disabled) { background: var(--panel); box-shadow: inset 0 0 0 999px rgba(128,128,128,.18); }
+  /* 隠している間は、スタート等のボタン行を非表示にする（右上の窓操作⤢−×は、カーソルを乗せると表示できる） */
+  body.mini.ctrlhidden #mainRow { display: none; }
+  /* 小さなウィンドウでは窓操作ボタンも小さくして、バーや切り替えボタンと重なりにくくする */
+  body.mini .winctl { top: clamp(2px, 2.5vh, 6px); right: clamp(4px, 2vh, 8px); gap: clamp(2px, 1vh, 4px); }
+  body.mini .winbtn {
+    font-size: clamp(11px, 7vh, 14px); line-height: clamp(14px, 9vh, 22px);
+    padding: 0 clamp(6px, 3vh, 9px); min-width: 0;
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="winctl">
+    <button class="winbtn" id="expandBtn" title="通常表示に戻す（Escキー）" aria-label="通常表示に戻す">⤢</button>
+    <button class="winbtn" id="minBtn" title="最小化" aria-label="最小化">−</button>
+    <button class="winbtn" id="closeBtn" title="閉じる" aria-label="閉じる">×</button>
+  </div>
+  <div class="readout" id="readout">25:00</div>
+  <div class="setbadge" id="setBadge" title="設定した時間">25分</div>
+
+  <div class="bar" id="bar" role="group" aria-label="残り時間の目盛り">
+    <button class="minitoggle" id="miniToggle" aria-expanded="false" aria-controls="mainRow">操作を表示</button>
+  </div>
+  <div class="scale">
+    <span>終了</span>
+    <span id="segInfo">1目盛り＝1分15秒</span>
+    <span id="maxLabel">25分</span>
+  </div>
+  <div class="hint" id="hint">スライダーやボタンで時間を設定できます</div>
+
+  <div class="row" id="mainRow">
+    <button class="primary" id="startBtn">スタート</button>
+    <button id="resetBtn">リセット</button>
+    <button id="miniBtn" title="数字とバーだけの小さな表示にします（Mキー）">小窓モード</button>
+    <button id="barOnlyBtn" class="toggle" aria-pressed="false" title="バーのみモード：残り時間の数字を隠し、バーだけで経過を見ます（Bキー）">バーのみ</button>
+    <button id="themeBtn" class="toggle" aria-pressed="false" title="ダークモードの切り替え">ダーク</button>
+  </div>
+
+  <div class="row">
+    <button class="adj" id="m5">−5分</button>
+    <button class="adj" id="m1">−1分</button>
+    <span class="setlabel" id="setLabel">25分</span>
+    <button class="adj" id="p1">＋1分</button>
+    <button class="adj" id="p5">＋5分</button>
+  </div>
+  <div class="row">
+    <input type="range" id="slider" min="1" max="120" step="1" value="25" aria-label="タイマーの時間（分）">
+  </div>
+
+  <div class="row" id="presets"></div>
+
+  <div class="row" id="colors"></div>
+  <div class="colorset" id="colorSet">
+    <div class="cs-title">進行度に応じた色の組み合わせ</div>
+    <div class="cs-note">左の色から順に、残りが「多い → 中間 → 少ない」のときの色です。</div>
+    <div class="pgrid" id="pgrid" role="group" aria-label="色の組み合わせ"></div>
+    <button class="custombtn toggle" id="customBtn" aria-expanded="false" aria-controls="customPanel"
+            title="3つの色を自由に選びます">
+      <span class="cdots" id="cdots"><i></i><i></i><i></i></span>
+      <span>自由に色を選ぶ</span>
+      <span class="inuse" id="inuse" hidden>✓ カスタム使用中</span>
+    </button>
+    <div class="cpanel" id="customPanel" hidden>
+      <label class="stage">残り多い（50%超）<input type="color" id="stage0"></label>
+      <label class="stage">中間（25〜50%）<input type="color" id="stage1"></label>
+      <label class="stage">残り少ない（25%以下）<input type="color" id="stage2"></label>
+      <button class="tiny" id="stageReset" title="既定（緑・黄・赤）に戻す">既定に戻す</button>
+    </div>
+  </div>
+  <div class="row">
+    <label class="chk"><input type="checkbox" id="autoChk" checked> 残りに応じて色を変える</label>
+    <label class="chk"><input type="checkbox" id="fadeChk" checked> 消えていく目盛りをうっすら点滅させる</label>
+    <label class="chk"><input type="checkbox" id="glowChk" checked> 目盛りの光のにじみを表示する</label>
+    <label class="chk"><input type="checkbox" id="soundChk" checked> 終了時に音を鳴らす</label>
+  </div>
+</div>
+
+<script>
+(function () {
+  var N = 20;
+  var colors = ['#2fa862', '#2f7be0', '#e03b2f', '#f08a24', '#8a4fd1'];
+  var presets = [5, 10, 15, 25, 30, 45, 60, 90];
+
+  var state = {
+    setMin: 25,
+    setSec: 25 * 60,
+    remainSec: 25 * 60,
+    running: false,
+    done: false,
+    endAt: 0,
+    color: colors[0],
+    auto: true,
+    sound: true,
+    barOnly: false,
+    theme: 'auto',
+    fade: true,
+    glow: true,
+    stageColors: ['#2fa862', '#f0b323', '#e03b2f']
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var app = $('app'), bar = $('bar'), readout = $('readout'), hint = $('hint');
+  var startBtn = $('startBtn'), resetBtn = $('resetBtn'), slider = $('slider');
+  var setLabel = $('setLabel'), segInfo = $('segInfo'), maxLabel = $('maxLabel');
+  var segs = [], audioCtx = null, timerId = null;
+
+  // ---- 保存と読み込み ----
+  function save() {
+    try {
+      localStorage.setItem('vtimerBar', JSON.stringify({ setMin: state.setMin, color: state.color, auto: state.auto, sound: state.sound, fade: state.fade, glow: state.glow, barOnly: state.barOnly, theme: state.theme, stageColors: state.stageColors }));
+    } catch (e) {}
+  }
+  function load() {
+    try {
+      var d = JSON.parse(localStorage.getItem('vtimerBar') || 'null');
+      if (d) {
+        if (d.setMin >= 1 && d.setMin <= 120) state.setMin = Math.round(d.setMin);
+        if (colors.indexOf(d.color) >= 0) state.color = d.color;
+        if (typeof d.auto === 'boolean') state.auto = d.auto;
+        if (typeof d.sound === 'boolean') state.sound = d.sound;
+        if (typeof d.fade === 'boolean') state.fade = d.fade;
+        if (typeof d.glow === 'boolean') state.glow = d.glow;
+        if (typeof d.barOnly === 'boolean') state.barOnly = d.barOnly;
+        if (d.theme === 'auto' || d.theme === 'light' || d.theme === 'dark') state.theme = d.theme;
+        if (Array.isArray(d.stageColors) && d.stageColors.length === 3 &&
+            d.stageColors.every(function (c) { return /^#[0-9a-fA-F]{6}$/.test(c); })) state.stageColors = d.stageColors;
+      }
+    } catch (e) {}
+    state.setSec = state.setMin * 60;
+    state.remainSec = state.setSec;
+  }
+
+  // ---- 表示用の整形 ----
+  function fmt(sec) {
+    sec = Math.max(0, Math.ceil(sec));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function fmtSeg(sec) {
+    var r = Math.round(sec), m = Math.floor(r / 60), s = r % 60;
+    if (m === 0) return s + '秒';
+    if (s === 0) return m + '分';
+    return m + '分' + s + '秒';
+  }
+  function autoColor() {
+    var ratio = state.remainSec / state.setSec;
+    if (ratio > 0.5) return state.stageColors[0];
+    if (ratio > 0.25) return state.stageColors[1];
+    return state.stageColors[2];
+  }
+
+  // ---- 目盛りの生成 ----
+  for (var i = 0; i < N; i++) {
+    var d = document.createElement('div');
+    d.className = 'seg';
+    bar.appendChild(d);
+    segs.push(d);
+  }
+
+  // ---- 描画 ----
+  function render() {
+    var segSec = state.setSec / N;
+    var lit;
+    if (state.done) lit = N;
+    else if (state.remainSec <= 0) lit = 0;
+    else lit = Math.min(N, Math.ceil(state.remainSec / segSec - 1e-9));
+
+    var litColor = state.done ? (state.auto ? state.stageColors[2] : state.color) : (state.auto ? autoColor() : state.color);
+    document.documentElement.style.setProperty('--lit', litColor);
+    document.documentElement.style.setProperty('--accent', state.auto ? '#2f7be0' : state.color);
+
+    for (var i = 0; i < N; i++) {
+      segs[i].classList.toggle('on', i < lit);
+      segs[i].classList.toggle('cur', state.running && !state.done && i === lit - 1);
+    }
+
+    readout.textContent = fmt(state.remainSec);
+    document.title = (state.running && !state.barOnly ? fmt(state.remainSec) + ' ' : '') + 'ビジュアルタイマー（横型）';
+    startBtn.textContent = state.running ? '一時停止' : (state.remainSec < state.setSec && state.remainSec > 0 ? '再開' : 'スタート');
+
+    setLabel.textContent = state.setMin + '分';
+    $('setBadge').textContent = state.setMin + '分';
+    maxLabel.textContent = state.setMin + '分';
+    segInfo.textContent = '1目盛り＝' + fmtSeg(segSec);
+    slider.value = state.setMin;
+
+    var untouched = !state.running && state.remainSec === state.setSec;
+    var ps = document.querySelectorAll('.preset');
+    for (var j = 0; j < ps.length; j++) {
+      ps[j].classList.toggle('active', Number(ps[j].dataset.min) === state.setMin && untouched);
+    }
+    var sw = document.querySelectorAll('.swatch');
+    for (var k = 0; k < sw.length; k++) {
+      sw[k].classList.toggle('active', !state.auto && sw[k].dataset.color === state.color);
+    }
+    app.classList.toggle('done', state.done);
+    document.body.classList.toggle('nofade', !state.fade);
+    document.body.classList.toggle('noglow', !state.glow);
+    document.body.classList.toggle('baronly', state.barOnly);
+    $('barOnlyBtn').classList.toggle('on', state.barOnly);
+    $('barOnlyBtn').setAttribute('aria-pressed', state.barOnly ? 'true' : 'false');
+
+    // 計測中は時間の変更ができない
+    var locked = document.querySelectorAll('.adj, .preset, #slider');
+    for (var n = 0; n < locked.length; n++) locked[n].disabled = state.running;
+  }
+
+  // ---- 音 ----
+  function ensureAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {}
+  }
+  function beep(times) {
+    if (!state.sound || !audioCtx) return;
+    for (var i = 0; i < times; i++) {
+      var t = audioCtx.currentTime + i * 0.5;
+      var osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(t); osc.stop(t + 0.4);
+    }
+  }
+
+  // ---- 画面を点灯したままにする（計測中だけ） ----
+  var wakeLock = null;
+  function requestWake() {
+    try {
+      if (navigator.wakeLock && !wakeLock) {
+        navigator.wakeLock.request('screen').then(function (l) {
+          wakeLock = l;
+          l.addEventListener('release', function () { wakeLock = null; });
+          if (!state.running) releaseWake();
+        }).catch(function () {});
+      }
+    } catch (e) {}
+  }
+  function releaseWake() {
+    try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) {}
+  }
+  // 別のアプリから戻ったとき、画面の点灯維持をかけ直し、表示も最新にする
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && state.running) { requestWake(); tick(); }
+  });
+
+  // ---- タイマーの動作 ----
+  function tick() {
+    var left = (state.endAt - Date.now()) / 1000;
+    if (left <= 0) {
+      state.remainSec = 0;
+      stop();
+      state.done = true;
+      hint.textContent = '時間です。リセットで元の時間に戻ります';
+      beep(3);
+      try { if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 400]); } catch (e) {}
+    } else {
+      state.remainSec = left;
+    }
+    render();
+  }
+  function start() {
+    if (state.remainSec <= 0 || state.done) state.remainSec = state.setSec;
+    state.done = false;
+    ensureAudio();
+    state.running = true;
+    state.endAt = Date.now() + state.remainSec * 1000;
+    hint.textContent = '計測中';
+    if (timerId) clearInterval(timerId);
+    timerId = setInterval(tick, 100);
+    requestWake();
+    render();
+  }
+  function stop() {
+    state.running = false;
+    releaseWake();
+    if (timerId) { clearInterval(timerId); timerId = null; }
+  }
+  function pause() {
+    if (!state.running) return;
+    state.remainSec = Math.max(0, (state.endAt - Date.now()) / 1000);
+    stop();
+    hint.textContent = '一時停止中';
+    render();
+  }
+  function reset() {
+    stop();
+    state.done = false;
+    state.remainSec = state.setSec;
+    hint.textContent = 'スライダーやボタンで時間を設定できます';
+    render();
+  }
+  function setMinutes(min) {
+    min = Math.max(1, Math.min(120, Math.round(min)));
+    stop();
+    state.done = false;
+    state.setMin = min;
+    state.setSec = min * 60;
+    state.remainSec = state.setSec;
+    hint.textContent = '設定：' + min + '分';
+    save();
+    render();
+  }
+
+  // ---- 操作 ----
+  startBtn.addEventListener('click', function () { state.running ? pause() : start(); });
+  resetBtn.addEventListener('click', reset);
+  slider.addEventListener('input', function () { setMinutes(Number(slider.value)); });
+  $('m5').addEventListener('click', function () { setMinutes(state.setMin - 5); });
+  $('m1').addEventListener('click', function () { setMinutes(state.setMin - 1); });
+  $('p1').addEventListener('click', function () { setMinutes(state.setMin + 1); });
+  $('p5').addEventListener('click', function () { setMinutes(state.setMin + 5); });
+
+  var pr = $('presets');
+  presets.forEach(function (m) {
+    var b = document.createElement('button');
+    b.className = 'preset';
+    b.dataset.min = m;
+    b.textContent = m + '分';
+    b.addEventListener('click', function () { setMinutes(m); });
+    pr.appendChild(b);
+  });
+
+  var cr = $('colors');
+  colors.forEach(function (c) {
+    var b = document.createElement('button');
+    b.className = 'swatch';
+    b.dataset.color = c;
+    b.style.background = c;
+    b.setAttribute('aria-label', '色を選ぶ');
+    b.addEventListener('click', function () {
+      state.color = c;
+      state.auto = false;
+      $('autoChk').checked = false;
+      save();
+      render();
+      renderColorUI();
+    });
+    cr.appendChild(b);
+  });
+
+  $('autoChk').addEventListener('change', function (e) { state.auto = e.target.checked; save(); render(); renderColorUI(); });
+  $('soundChk').addEventListener('change', function (e) { state.sound = e.target.checked; save(); });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && mini) { setMini(false); return; }
+    var tag = e.target && e.target.tagName;
+    if (tag === 'INPUT' || tag === 'BUTTON') return;
+    if (e.code === 'Space') { e.preventDefault(); state.running ? pause() : start(); }
+    else if (e.key === 'r' || e.key === 'R') reset();
+    else if (e.key === 'm' || e.key === 'M') setMini(!mini);
+    else if (e.key === 'b' || e.key === 'B') setBarOnly(!state.barOnly);
+    else if ((e.key === 'h' || e.key === 'H') && mini) setMiniControls(!miniCtrlHidden);
+  });
+
+  // ---- 目盛りの演出と色の設定 ----
+  // 進行度（残り多い／中間／残り少ない）ごとの色の組み合わせ。先頭が既定
+  var stagePresets = [
+    { id: 'standard', name: '標準（既定）', desc: '緑 → 黄 → 赤',   colors: ['#2fa862', '#f0b323', '#e03b2f'] },
+    { id: 'blue',     name: 'ブルー',       desc: '青 → 黄 → 橙赤', colors: ['#1f6fd0', '#f0b323', '#d63a1a'] },
+    { id: 'teal',     name: 'ティール',     desc: '青緑 → 橙 → 紫', colors: ['#1fa89a', '#f08a24', '#a03ad0'] },
+    { id: 'dusk',     name: '夕焼け',       desc: '青紫 → 桃 → 橙', colors: ['#6a5ae0', '#e0559c', '#f59e0b'] }
+  ];
+  var defaultStage = stagePresets[0].colors;
+  var stageInputs = [$('stage0'), $('stage1'), $('stage2')];
+  var presetBtns = [];
+
+  function sameColors(a, b) {
+    for (var i = 0; i < 3; i++) if (String(a[i]).toLowerCase() !== String(b[i]).toLowerCase()) return false;
+    return true;
+  }
+  function currentPresetId() {
+    for (var i = 0; i < stagePresets.length; i++) {
+      if (sameColors(state.stageColors, stagePresets[i].colors)) return stagePresets[i].id;
+    }
+    return null; // どのプリセットとも違う＝カスタム
+  }
+  function syncStageInputs() {
+    for (var i = 0; i < 3; i++) stageInputs[i].value = state.stageColors[i];
+  }
+  function applyStageColors(cols) {
+    state.stageColors = cols.slice();
+    state.auto = true;
+    $('autoChk').checked = true;
+    save();
+    render();
+    renderColorUI();
+  }
+
+  // プリセットのカードを作る
+  var pgrid = $('pgrid');
+  stagePresets.forEach(function (p) {
+    var b = document.createElement('button');
+    b.className = 'pcard';
+    b.dataset.id = p.id;
+    b.setAttribute('aria-pressed', 'false');
+    b.title = p.name + '：' + p.desc;
+    b.innerHTML = '<span class="pstrip"><i style="background:' + p.colors[0] + '"></i><i style="background:' + p.colors[1] +
+      '"></i><i style="background:' + p.colors[2] + '"></i></span><span class="pname">' + p.name + '</span><span class="pdesc">' + p.desc + '</span>';
+    b.addEventListener('click', function () { applyStageColors(p.colors); syncStageInputs(); });
+    pgrid.appendChild(b);
+    presetBtns.push(b);
+  });
+
+  // 選択状態・カスタム使用中の表示を更新する（色の入力欄の値は触らない）
+  function renderColorUI() {
+    var id = currentPresetId();
+    presetBtns.forEach(function (b) {
+      var on = b.dataset.id === id;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    var custom = id === null;
+    $('customBtn').classList.toggle('on', custom);
+    $('inuse').hidden = !custom;
+    var dots = $('cdots').children;
+    for (var i = 0; i < 3; i++) dots[i].style.background = state.stageColors[i];
+    $('colorSet').classList.toggle('dim', !state.auto);
+  }
+
+  // 自由に色を選ぶ：ボタンを押したときだけカラーピッカーを表示する
+  $('customBtn').addEventListener('click', function () {
+    var panel = $('customPanel');
+    var open = panel.hidden;
+    panel.hidden = !open;
+    $('customBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) syncStageInputs();
+  });
+  stageInputs.forEach(function (inp, idx) {
+    inp.addEventListener('input', function () {
+      var cols = state.stageColors.slice();
+      cols[idx] = inp.value;
+      applyStageColors(cols);
+    });
+  });
+  $('stageReset').addEventListener('click', function () {
+    applyStageColors(defaultStage);
+    syncStageInputs();
+  });
+  $('fadeChk').addEventListener('change', function (e) { state.fade = e.target.checked; save(); render(); });
+  $('glowChk').addEventListener('change', function (e) { state.glow = e.target.checked; save(); render(); });
+
+  // ---- 小窓モード ----
+  var mini = false;
+  // 小窓で操作ボタンを隠しているか（初期状態は隠す。前回の状態を覚える）
+  var miniCtrlHidden = true;
+  try { miniCtrlHidden = localStorage.getItem('vtimerMiniCtrl') !== '0'; } catch (e) {}
+  function applyMiniControls() {
+    document.body.classList.toggle('ctrlhidden', mini && miniCtrlHidden);
+    var t = $('miniToggle');
+    t.textContent = miniCtrlHidden ? '操作を表示' : '操作を隠す';
+    t.title = (miniCtrlHidden ? '操作ボタンを表示します' : '操作ボタンを隠します') + '（Hキー）';
+    t.setAttribute('aria-expanded', miniCtrlHidden ? 'false' : 'true');
+  }
+  function setMiniControls(hidden) {
+    miniCtrlHidden = !!hidden;
+    try { localStorage.setItem('vtimerMiniCtrl', miniCtrlHidden ? '1' : '0'); } catch (e) {}
+    applyMiniControls();
+    if (mini && window.electronAPI && window.electronAPI.setMiniMode) window.electronAPI.setMiniMode(true, state.barOnly, miniCtrlHidden);
+  }
+  function setMini(flag) {
+    mini = !!flag;
+    document.body.classList.toggle('mini', mini);
+    applyMiniControls();
+    readout.title = (mini && !window.electronAPI) ? 'クリックで開始／一時停止' : '';
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    if (window.electronAPI && window.electronAPI.setMiniMode) window.electronAPI.setMiniMode(mini, state.barOnly, miniCtrlHidden);
+    try { localStorage.setItem('vtimerMini', mini ? '1' : '0'); } catch (e) {}
+  }
+  $('miniBtn').addEventListener('click', function () { setMini(true); });
+  $('expandBtn').addEventListener('click', function () { setMini(false); });
+  $('miniToggle').addEventListener('click', function (e) {
+    e.stopPropagation(); // バー全体のクリック（開始／停止）として扱わない
+    setMiniControls(!miniCtrlHidden);
+    this.blur();
+  });
+  function toggleRun() { state.running ? pause() : start(); }
+  readout.addEventListener('click', function () { if (mini) toggleRun(); });
+  bar.addEventListener('click', function () { if (mini) toggleRun(); });
+
+  // ---- バーのみモード（残り時間の数字を隠す） ----
+  function setBarOnly(flag) {
+    state.barOnly = !!flag;
+    save();
+    render();
+    if (mini && window.electronAPI && window.electronAPI.setMiniMode) window.electronAPI.setMiniMode(true, state.barOnly, miniCtrlHidden);
+  }
+  $('barOnlyBtn').addEventListener('click', function () { setBarOnly(!state.barOnly); });
+
+  // ---- ダークモード ----
+  var darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function isDark() {
+    return state.theme === 'dark' || (state.theme === 'auto' && !!darkQuery && darkQuery.matches);
+  }
+  function applyTheme() {
+    if (state.theme === 'auto') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', state.theme);
+    $('themeBtn').classList.toggle('on', isDark());
+    $('themeBtn').setAttribute('aria-pressed', isDark() ? 'true' : 'false');
+  }
+  $('themeBtn').addEventListener('click', function () {
+    state.theme = isDark() ? 'light' : 'dark';
+    save();
+    applyTheme();
+  });
+  if (darkQuery && darkQuery.addEventListener) darkQuery.addEventListener('change', applyTheme);
+
+  // ---- 初期化 ----
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(function () {});
+  load();
+  $('autoChk').checked = state.auto;
+  $('soundChk').checked = state.sound;
+  $('fadeChk').checked = state.fade;
+  $('glowChk').checked = state.glow;
+  syncStageInputs();
+  renderColorUI();
+  applyTheme();
+  applyMiniControls();
+  render();
+  try {
+    if (window.electronAPI && window.electronAPI.setMiniMode && localStorage.getItem('vtimerMini') === '1') setMini(true);
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
