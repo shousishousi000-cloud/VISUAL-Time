@@ -24,12 +24,12 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
-      --bg: #1c1c1e; --panel: #2a2a2d; --text: #f0f0f0; --sub: #b4b4ba; --off: #3b3b40; --shadow: rgba(0,0,0,.55);
+      --bg: #1c1c1e; --panel: #2a2a2d; --text: #f0f0f0; --sub: #b4b4ba; --off: #46464c; --track: rgba(0,0,0,.30); --shadow: rgba(0,0,0,.55);
     }
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --bg: #1c1c1e; --panel: #2a2a2d; --text: #f0f0f0; --sub: #b4b4ba; --off: #3b3b40; --shadow: rgba(0,0,0,.55);
+    --bg: #1c1c1e; --panel: #2a2a2d; --text: #f0f0f0; --sub: #b4b4ba; --off: #46464c; --track: rgba(0,0,0,.30); --shadow: rgba(0,0,0,.55);
   }
   * { box-sizing: border-box; }
   html { height: 100%; }
@@ -65,16 +65,33 @@
     gap: clamp(3px, .7vw, 8px);
     padding: 14px;
     margin: 22px 0 6px;
-    background: rgba(128,128,128,.12);
+    background: var(--track, rgba(128,128,128,.12));
     border-radius: 18px;
   }
   .seg {
     flex: 1;
-    height: clamp(24px, 5.5vw, 48px);
+    min-width: 0;
+    aspect-ratio: 1 / var(--sh, 1);   /* 形(--sh)ごとの縦横比。窓の縦横比には左右されない */
     border-radius: 6px;
     background: var(--off);
     transition: background .2s, box-shadow .2s;
   }
+  /* ---- バーの形（3種類）：目盛りバー／ブロック（前回の形）／丸いバー（以前の形） ---- */
+  body.shape-scale { --sh: 1.9; }
+  body.shape-block { --sh: 1.45; }
+  body.shape-round { --sh: 1; }
+  body.shape-scale .bar { gap: 2px; padding: 10px 12px; border-radius: 10px; }
+  body.shape-scale .seg { border-radius: 2px; }
+  body.shape-block .seg, body.shape-round .seg { border-radius: 6px; }
+  body.mini.shape-scale .bar { gap: min(.3vw, 1px); border-radius: 8px; }
+  body.mini.shape-scale .seg { border-radius: 2px; }
+  /* 形の選択ボタンの絵 */
+  .shapebtn { display: inline-flex; align-items: center; gap: 8px; }
+  .shp { display: inline-flex; align-items: center; height: 16px; }
+  .shp i { display: block; background: currentColor; opacity: .8; }
+  .shp-scale i { width: 3px; height: 16px; margin-right: 1px; border-radius: 1px; }
+  .shp-block i { width: 5px; height: 14px; margin-right: 3px; border-radius: 2px; }
+  .shp-round i { width: 8px; height: 8px; margin-right: 3px; border-radius: 3px; }
   .seg.on {
     background: var(--lit);
     box-shadow: 0 0 10px -1px var(--lit);
@@ -132,13 +149,16 @@
   .notehint:empty { display: none; }
 
   /* ---- スマホ向け ---- */
-  #miniBtn, .minitoggle { display: none !important; }
+  #miniBtn { display: none !important; }
+  .minitoggle { display: none !important; }   /* スマホ版では「操作を表示」は出さない（非表示モードのボタンをもう一度押して戻す） */
   body { padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); -webkit-tap-highlight-color: transparent; }
   button, input[type=range] { touch-action: manipulation; }
   @media (max-width: 600px) {
     .app { padding: 20px 12px 24px; border-radius: 20px; }
-    .bar { padding: 10px; gap: 3px; }
-    .seg { height: clamp(34px, 9vw, 48px); }
+    /* 目盛りを少なくして1つずつを横に大きくし、形の縦横比はPC版と同じに保つ（縦長にならない） */
+    body.shape-scale .bar, body.shape-block .bar, body.shape-round .bar { padding: 10px; }
+    body.shape-scale .bar { gap: 3px; }
+    body.shape-block .bar, body.shape-round .bar { gap: 6px; }
     button { padding: 11px 14px; }
     button.primary { padding: 14px 22px; min-width: 130px; }
     .preset { padding: 9px 12px; }
@@ -178,7 +198,7 @@
   body.baronly .setbadge { display: block; font-size: clamp(30px, 6vw, 56px); margin: 6px 0 16px; }
   body.mini.baronly .setbadge { font-size: clamp(11px, 6.5vh, 16px); margin: 0 0 min(1.2vh, 3px); }
   body.baronly:not(.mini) .bar { margin-top: 0; }
-  body.baronly:not(.mini) .seg { height: clamp(36px, 8vw, 70px); }
+  body.baronly:not(.mini) .seg { aspect-ratio: 1 / calc(var(--sh, 1) * 1.3); }   /* バーのみは少しだけ大きく */
   button.toggle.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
 
   /* ---- 小窓モード（数字とバーだけ表示） ---- */
@@ -208,7 +228,7 @@
     padding: min(1.6vw, 3vh); margin: min(2vw, 3vh) 0 0;
     gap: min(.8vw, 2vh); border-radius: 12px; cursor: pointer;
   }
-  body.mini .seg { height: min(9vw, 18vh); border-radius: 4px; }
+  body.mini .seg { height: min(9vw, 18vh); aspect-ratio: auto; border-radius: 4px; }
   body.mini #mainRow { display: flex; margin-top: min(1.6vw, 3vh); gap: min(1vw, 2vh); }
   body.mini #mainRow button {
     font-size: clamp(11px, 6.5vh, 20px);
@@ -217,11 +237,11 @@
   }
   body.mini #miniBtn { display: none; }
   body.mini.baronly .bar { margin: 0; }
-  body.mini.baronly .seg { height: min(11vw, 26vh); }
+  body.mini.baronly .seg { height: min(11vw, 26vh); aspect-ratio: auto; }
 
   /* ---- 小窓：操作ボタンの表示／非表示 ---- */
   .minitoggle { display: none; }
-  body.mini .minitoggle {
+  body.mini .minitoggle, body.hideui .minitoggle {
     display: block; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
     z-index: 3; min-width: 0; white-space: nowrap; border-radius: 999px;
     font-size: clamp(10px, 5.5vh, 13px); line-height: 1.25; padding: .15em .9em;
@@ -231,11 +251,41 @@
     transition: opacity .12s, visibility 0s .12s;
   }
   /* バーの上にカーソルを少し止めたときだけ表示する（0.25秒の間を置く） */
-  body.mini .bar:hover .minitoggle, body.mini .minitoggle:focus-visible {
+  body.mini .bar:hover .minitoggle, body.mini .minitoggle:focus-visible,
+  body.hideui .bar:hover .minitoggle, body.hideui .minitoggle:focus-visible {
     opacity: 1; visibility: visible;
     transition: opacity .15s .25s, visibility 0s .25s;
   }
-  body.mini .minitoggle:hover:not(:disabled) { background: var(--panel); box-shadow: inset 0 0 0 999px rgba(128,128,128,.18); }
+  body.mini .minitoggle:hover:not(:disabled), body.hideui .minitoggle:hover:not(:disabled) { background: var(--panel); box-shadow: inset 0 0 0 999px rgba(128,128,128,.18); }
+  /* ---- 集中モード（色の選択を隠す）／非表示モード（通常サイズで、一時停止以外を隠す） ---- */
+  body.focus #colors, body.focus #colorSet { display: none; }
+  body.mini #focusBtn, body.mini #hideBtn { display: none; }
+  /* 残すのは「スタート/一時停止」「リセット」「非表示モード」と、時間の設定。それ以外のボタン・オプションは隠す */
+  body.hideui .scale, body.hideui .hint, body.hideui .colorset, body.hideui #colors, body.hideui .optrow,
+  body.hideui #miniBtn, body.hideui #barOnlyBtn, body.hideui #themeBtn, body.hideui #focusBtn { display: none; }
+  body.hideui .minitoggle { font-size: 14px; }
+  /* タッチ操作の端末にはカーソルがないので、非表示モードでは「操作を表示」を常に出す */
+  @media (hover: none) { body.hideui .minitoggle { opacity: 1; visibility: visible; } }
+  /* 小窓では、操作ボタンを表示していても隠していても、一時停止／再生ボタンを左上に常に表示する */
+  .miniplay { display: none; }
+  body.mini .miniplay {
+    display: flex; align-items: center; justify-content: center;
+    position: absolute; z-index: 4;
+    top: clamp(3px, 3vh, 8px); left: clamp(6px, 2.6vh, 12px);
+    width: clamp(18px, 24vh, 30px); height: clamp(18px, 24vh, 30px);
+    padding: 0; min-width: 0; border-radius: 50%;
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+  body.mini .miniplay:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
+  /* バーのみでも通常と同じ大きさにし、上の段(設定時間の行)をボタンと同じ高さにして、バーに重ならないようにする */
+  body.mini.baronly .setbadge {
+    display: flex; align-items: center; justify-content: center;
+    min-height: calc(clamp(3px, 3vh, 8px) + clamp(18px, 24vh, 30px) - 4px);
+  }
+  .miniplay svg { width: 56%; height: 56%; fill: currentColor; display: block; }
+  .miniplay .ico-pause { display: none; }
+  .miniplay[data-state="run"] .ico-play { display: none; }
+  .miniplay[data-state="run"] .ico-pause { display: block; }
   /* 隠している間は、スタート等のボタン行を非表示にする（右上の窓操作⤢−×は、カーソルを乗せると表示できる） */
   body.mini.ctrlhidden #mainRow { display: none; }
   /* 小さなウィンドウでは窓操作ボタンも小さくして、バーや切り替えボタンと重なりにくくする */
@@ -253,6 +303,10 @@
     <button class="winbtn" id="minBtn" title="最小化" aria-label="最小化">−</button>
     <button class="winbtn" id="closeBtn" title="閉じる" aria-label="閉じる">×</button>
   </div>
+  <button class="miniplay" id="miniPlay" data-state="idle" title="スタート" aria-label="スタート">
+    <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>
+    <svg class="ico-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h4.2v15H6zM13.8 4.5H18v15h-4.2z"/></svg>
+  </button>
   <div class="readout" id="readout">25:00</div>
   <div class="setbadge" id="setBadge" title="設定した時間">25分</div>
 
@@ -272,6 +326,8 @@
     <button id="miniBtn" title="数字とバーだけの小さな表示にします（Mキー）">小窓モード</button>
     <button id="barOnlyBtn" class="toggle" aria-pressed="false" title="バーのみモード：残り時間の数字を隠し、バーだけで経過を見ます（Bキー）">バーのみ</button>
     <button id="themeBtn" class="toggle" aria-pressed="false" title="ダークモードの切り替え">ダーク</button>
+    <button id="focusBtn" class="toggle" aria-pressed="false" title="集中モード：色の選択（色のボタン・色の組み合わせ）を隠します（Fキー）">集中モード</button>
+    <button id="hideBtn" class="toggle" aria-pressed="false" title="非表示モード：スタート/一時停止・リセット・時間の設定以外を隠します。バーの上にカーソルを止めると「操作を表示」が出ます（Hキー）">非表示モード</button>
   </div>
 
   <div class="row">
@@ -305,22 +361,29 @@
       <button class="tiny" id="stageReset" title="既定（緑・黄・赤）に戻す">既定に戻す</button>
     </div>
   </div>
-  <div class="row">
+  <div class="row optrow" id="shapeRow" role="group" aria-label="バーの形">
+    <span class="stagelabel">バーの形</span>
+    <button class="toggle shapebtn" data-shape="scale" aria-pressed="false" title="細い目盛りが隙間少なく並ぶ形"><span class="shp shp-scale"><i></i><i></i><i></i><i></i><i></i></span>目盛りバー</button>
+    <button class="toggle shapebtn" data-shape="block" aria-pressed="false" title="縦長の角丸ブロック（前回の形）"><span class="shp shp-block"><i></i><i></i><i></i></span>ブロック</button>
+    <button class="toggle shapebtn" data-shape="round" aria-pressed="false" title="四角い角丸の目盛り（以前の形）"><span class="shp shp-round"><i></i><i></i><i></i></span>丸いバー</button>
+  </div>
+  <div class="row optrow">
     <label class="chk"><input type="checkbox" id="autoChk" checked> 残りに応じて色を変える</label>
     <label class="chk"><input type="checkbox" id="fadeChk" checked> 消えていく目盛りをうっすら点滅させる</label>
     <label class="chk"><input type="checkbox" id="glowChk" checked> 目盛りの光のにじみを表示する</label>
     <label class="chk"><input type="checkbox" id="soundChk" checked> 終了時に音を鳴らす</label>
+    <label class="chk" title="非表示モードに入っても、画面（カード）の大きさを変えず、隠した部分を空白にします"><input type="checkbox" id="keepChk" checked> 非表示モードで画面の大きさを保つ（隠した部分を空白にする）</label>
   </div>
-  <div class="row">
+  <div class="row optrow">
     <label class="chk"><input type="checkbox" id="notifyChk"> 通知欄に残り時間と進行度を表示する</label>
     <button class="tiny" id="notifyTest" hidden>通知を試す</button>
   </div>
-  <div class="notehint" id="notifyHint" role="status"></div>
+  <div class="notehint optrow" id="notifyHint" role="status"></div>
 </div>
 
 <script>
 (function () {
-  var N = 20;
+  var N = 10;   // スマホ版は目盛りを少なくして、1つずつを大きくする
   var colors = ['#2fa862', '#2f7be0', '#e03b2f', '#f08a24', '#8a4fd1'];
   var presets = [5, 10, 15, 25, 30, 45, 60, 90];
 
@@ -338,8 +401,11 @@
     theme: 'auto',
     fade: true,
     glow: true,
-    stageColors: ['#2fa862', '#f0b323', '#e03b2f']
+    stageColors: ['#2fa862', '#f0b323', '#e03b2f'],
+    shape: 'scale',   // バーの形：scale（目盛りバー）／block（ブロック）／round（丸いバー）
+    keepSpace: true   // 非表示モードで、隠した部分を空白にして画面の大きさを保つ
   };
+  var SHAPES = ['scale', 'block', 'round'];
 
   var $ = function (id) { return document.getElementById(id); };
   var app = $('app'), bar = $('bar'), readout = $('readout'), hint = $('hint');
@@ -351,7 +417,7 @@
   // ---- 保存と読み込み ----
   function save() {
     try {
-      localStorage.setItem('vtimerBar', JSON.stringify({ setMin: state.setMin, color: state.color, auto: state.auto, sound: state.sound, fade: state.fade, glow: state.glow, barOnly: state.barOnly, theme: state.theme, stageColors: state.stageColors }));
+      localStorage.setItem('vtimerBar', JSON.stringify({ setMin: state.setMin, color: state.color, auto: state.auto, sound: state.sound, fade: state.fade, glow: state.glow, barOnly: state.barOnly, theme: state.theme, stageColors: state.stageColors, shape: state.shape, keepSpace: state.keepSpace }));
     } catch (e) {}
   }
   function load() {
@@ -366,6 +432,8 @@
         if (typeof d.glow === 'boolean') state.glow = d.glow;
         if (typeof d.barOnly === 'boolean') state.barOnly = d.barOnly;
         if (d.theme === 'auto' || d.theme === 'light' || d.theme === 'dark') state.theme = d.theme;
+        if (SHAPES.indexOf(d.shape) >= 0) state.shape = d.shape;
+        if (typeof d.keepSpace === 'boolean') state.keepSpace = d.keepSpace;
         if (Array.isArray(d.stageColors) && d.stageColors.length === 3 &&
             d.stageColors.every(function (c) { return /^#[0-9a-fA-F]{6}$/.test(c); })) state.stageColors = d.stageColors;
       }
@@ -427,6 +495,10 @@
 
     readout.textContent = fmt(state.remainSec);
     document.title = (state.running && !state.barOnly ? fmt(state.remainSec) + ' ' : '') + 'ビジュアルタイマー（横型）';
+    var mp = $('miniPlay');
+    mp.dataset.state = state.running ? 'run' : 'idle';
+    var mpLabel = state.running ? '一時停止' : (state.remainSec < state.setSec && state.remainSec > 0 ? '再開' : 'スタート');
+    mp.title = mpLabel; mp.setAttribute('aria-label', mpLabel);
     startBtn.textContent = state.running ? '一時停止' : (state.remainSec < state.setSec && state.remainSec > 0 ? '再開' : 'スタート');
 
     setLabel.textContent = state.setMin + '分';
@@ -561,6 +633,7 @@
   // ---- 操作 ----
   startBtn.addEventListener('click', function () { state.running ? pause() : start(); });
   resetBtn.addEventListener('click', reset);
+  $('miniPlay').addEventListener('click', function () { state.running ? pause() : start(); });
   slider.addEventListener('input', function () { setMinutes(Number(slider.value)); });
   $('m5').addEventListener('click', function () { setMinutes(state.setMin - 5); });
   $('m1').addEventListener('click', function () { setMinutes(state.setMin - 1); });
@@ -606,7 +679,8 @@
     else if (e.key === 'r' || e.key === 'R') reset();
     else if (e.key === 'm' || e.key === 'M') setMini(!mini);
     else if (e.key === 'b' || e.key === 'B') setBarOnly(!state.barOnly);
-    else if ((e.key === 'h' || e.key === 'H') && mini) setMiniControls(!miniCtrlHidden);
+    else if (e.key === 'h' || e.key === 'H') { if (mini) setMiniControls(!miniCtrlHidden); else setUiHidden(!uiHidden); }
+    else if (e.key === 'f' || e.key === 'F') setFocus(!focusMode);
   });
 
   // ---- 目盛りの演出と色の設定 ----
@@ -701,13 +775,54 @@
   // 小窓で操作ボタンを隠しているか（初期状態は隠す。前回の状態を覚える）
   var miniCtrlHidden = true;
   try { miniCtrlHidden = localStorage.getItem('vtimerMiniCtrl') !== '0'; } catch (e) {}
+  // 非表示モード（通常サイズ）。小窓にいる間は小窓側の「操作を隠す」が優先され、小窓を出ると元に戻る
+  var uiHidden = false;
+  var focusMode = false;
   function applyMiniControls() {
     document.body.classList.toggle('ctrlhidden', mini && miniCtrlHidden);
+    document.body.classList.toggle('hideui', uiHidden && !mini);
+    var hidden = mini ? miniCtrlHidden : uiHidden;
     var t = $('miniToggle');
-    t.textContent = miniCtrlHidden ? '操作を表示' : '操作を隠す';
-    t.title = (miniCtrlHidden ? '操作ボタンを表示します' : '操作ボタンを隠します') + '（Hキー）';
-    t.setAttribute('aria-expanded', miniCtrlHidden ? 'false' : 'true');
+    t.textContent = hidden ? '操作を表示' : '操作を隠す';
+    t.title = (hidden ? '操作ボタンを表示します' : '操作ボタンを隠します') + '（Hキー）';
+    t.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+    $('hideBtn').classList.toggle('on', uiHidden);
+    $('hideBtn').setAttribute('aria-pressed', uiHidden ? 'true' : 'false');
+    syncHideSpace();
   }
+  // 非表示モードに入る直前の画面（カード）の高さを測り、同じ高さを保つ。隠した部分は下側の空白になる。
+  // ただし空白のせいでスクロールバーが出ないよう、高さの上限は「窓の高さ」までにする。
+  // 窓の大きさを変えると、この計算をやり直して空白を増減する
+  function syncHideSpace() {
+    app.style.minHeight = '';
+    if (!(state.keepSpace && document.body.classList.contains('hideui'))) return;
+    document.body.classList.remove('hideui');
+    var h = app.offsetHeight;                 // 隠す前の高さ（窓の幅に合わせて測り直す）
+    document.body.classList.add('hideui');
+    var cs = getComputedStyle(document.body);
+    var avail = document.documentElement.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    if (h > 0) app.style.minHeight = Math.max(0, Math.min(h, avail)) + 'px';
+  }
+  var hideSpaceRaf = 0;
+  window.addEventListener('resize', function () {
+    if (!document.body.classList.contains('hideui') || hideSpaceRaf) return;
+    hideSpaceRaf = requestAnimationFrame(function () { hideSpaceRaf = 0; syncHideSpace(); });
+  });
+  $('keepChk').addEventListener('change', function (e) { state.keepSpace = e.target.checked; save(); syncHideSpace(); });
+  function setUiHidden(flag) {
+    uiHidden = !!flag;
+    applyMiniControls();
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
+  function setFocus(flag) {
+    focusMode = !!flag;
+    document.body.classList.toggle('focus', focusMode);
+    $('focusBtn').classList.toggle('on', focusMode);
+    $('focusBtn').setAttribute('aria-pressed', focusMode ? 'true' : 'false');
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
+  $('focusBtn').addEventListener('click', function () { setFocus(!focusMode); });
+  $('hideBtn').addEventListener('click', function () { setUiHidden(!uiHidden); });
   function setMiniControls(hidden) {
     miniCtrlHidden = !!hidden;
     try { localStorage.setItem('vtimerMiniCtrl', miniCtrlHidden ? '1' : '0'); } catch (e) {}
@@ -727,7 +842,7 @@
   $('expandBtn').addEventListener('click', function () { setMini(false); });
   $('miniToggle').addEventListener('click', function (e) {
     e.stopPropagation(); // バー全体のクリック（開始／停止）として扱わない
-    setMiniControls(!miniCtrlHidden);
+    if (mini) setMiniControls(!miniCtrlHidden); else setUiHidden(!uiHidden);
     this.blur();
   });
   function toggleRun() { state.running ? pause() : start(); }
@@ -760,6 +875,27 @@
     applyTheme();
   });
   if (darkQuery && darkQuery.addEventListener) darkQuery.addEventListener('change', applyTheme);
+
+  // ---- バーの形 ----
+  function applyShape() {
+    SHAPES.forEach(function (s) { document.body.classList.toggle('shape-' + s, state.shape === s); });
+    var bs = document.querySelectorAll('.shapebtn');
+    for (var i = 0; i < bs.length; i++) {
+      var on = bs[i].dataset.shape === state.shape;
+      bs[i].classList.toggle('on', on);
+      bs[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+  }
+  var shapeBtns = document.querySelectorAll('.shapebtn');
+  for (var si = 0; si < shapeBtns.length; si++) {
+    shapeBtns[si].addEventListener('click', function () {
+      state.shape = this.dataset.shape;
+      save();
+      applyShape();
+      render();
+      this.blur();
+    });
+  }
 
 
   // ---- 通知（Android Chrome：Service Worker の showNotification を使用） ----
@@ -836,10 +972,11 @@
       var label = { running: '計測中', paused: '一時停止中', done: '時間です', idle: '待機中' }[s.status];
       g.fillStyle = sub; g.font = '600 34px ' + fam; g.fillText(label, 400, 62);
       g.fillStyle = text; g.font = '700 128px ' + fam; g.fillText(fmt(s.remain), 400, 192);
-      var x0 = 40, w = 720, gap = 6, tw = (w - gap * (N - 1)) / N, y = 236, th = 92;
+      var scaleShape = state.shape === 'scale';
+      var x0 = 40, w = 720, gap = scaleShape ? 3 : 6, tw = (w - gap * (N - 1)) / N, y = 236, th = 92;
       for (var i = 0; i < N; i++) {
         g.fillStyle = i < s.lit ? s.color : off;
-        var x = x0 + i * (tw + gap), r = 7;
+        var x = x0 + i * (tw + gap), r = scaleShape ? 2 : 7;
         g.beginPath();
         g.moveTo(x + r, y); g.lineTo(x + tw - r, y); g.quadraticCurveTo(x + tw, y, x + tw, y + r);
         g.lineTo(x + tw, y + th - r); g.quadraticCurveTo(x + tw, y + th, x + tw - r, y + th);
@@ -947,10 +1084,12 @@
   // ---- 初期化 ----
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(function () {});
   load();
+  applyShape();
   $('autoChk').checked = state.auto;
   $('soundChk').checked = state.sound;
   $('fadeChk').checked = state.fade;
   $('glowChk').checked = state.glow;
+  $('keepChk').checked = state.keepSpace;
   syncStageInputs();
   renderColorUI();
   applyTheme();
