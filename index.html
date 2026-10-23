@@ -31,6 +31,11 @@
     color-scheme: dark;
     --bg: #1c1c1e; --panel: #2a2a2d; --text: #f0f0f0; --sub: #b4b4ba; --off: #46464c; --track: rgba(0,0,0,.30); --shadow: rgba(0,0,0,.55);
   }
+  /* ダークブルー：真っ黒より目に優しい紺色の背景 */
+  :root[data-theme="navy"] {
+    color-scheme: dark;
+    --bg: #0f1b2f; --panel: #1b2b45; --text: #eaf0fa; --sub: #a9b8d0; --off: #3a4c6e; --track: rgba(6,14,30,.34); --shadow: rgba(0,0,0,.45);
+  }
   * { box-sizing: border-box; }
   html { height: 100%; }
   body { margin: 0; min-height: 100%; }
@@ -198,6 +203,11 @@
   body.baronly .setbadge { display: block; font-size: clamp(30px, 6vw, 56px); margin: 6px 0 16px; }
   body.mini.baronly .setbadge { font-size: clamp(11px, 6.5vh, 16px); margin: 0 0 min(1.2vh, 3px); }
   body.baronly:not(.mini) .bar { margin-top: 0; }
+  /* PCアプリで「通常＋非表示モード＋バーのみ」のとき：設定時間の表示を小さくして余白を詰め、バーを横いっぱいに大きくする。
+     目盛りの縦横比（縦長にならない）と、目盛りの数(20個)は変えない */
+  body.electron.hideui.baronly:not(.mini) .setbadge { font-size: clamp(20px, 4.2vw, 36px); margin: 0 0 8px; }
+  body.electron.hideui.baronly:not(.mini) .app { padding-left: 14px; padding-right: 14px; max-width: 1000px; }
+  body.electron.hideui.baronly:not(.mini) .bar { padding-left: 10px; padding-right: 10px; }
   body.baronly:not(.mini) .seg { aspect-ratio: 1 / calc(var(--sh, 1) * 1.3); }   /* バーのみは少しだけ大きく */
   button.toggle.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
 
@@ -262,7 +272,7 @@
   body.mini #focusBtn, body.mini #hideBtn { display: none; }
   /* 残すのは「スタート/一時停止」「リセット」「非表示モード」と、時間の設定。それ以外のボタン・オプションは隠す */
   body.hideui .scale, body.hideui .hint, body.hideui .colorset, body.hideui #colors, body.hideui .optrow,
-  body.hideui #miniBtn, body.hideui #barOnlyBtn, body.hideui #themeBtn, body.hideui #focusBtn { display: none; }
+  body.hideui #miniBtn, body.hideui #barOnlyBtn, body.hideui #themeBtn, body.hideui #navyBtn, body.hideui #focusBtn { display: none; }
   body.hideui .minitoggle { font-size: 14px; }
   /* タッチ操作の端末にはカーソルがないので、非表示モードでは「操作を表示」を常に出す */
   @media (hover: none) { body.hideui .minitoggle { opacity: 1; visibility: visible; } }
@@ -326,6 +336,7 @@
     <button id="miniBtn" title="数字とバーだけの小さな表示にします（Mキー）">小窓モード</button>
     <button id="barOnlyBtn" class="toggle" aria-pressed="false" title="バーのみモード：残り時間の数字を隠し、バーだけで経過を見ます（Bキー）">バーのみ</button>
     <button id="themeBtn" class="toggle" aria-pressed="false" title="ダークモードの切り替え">ダーク</button>
+    <button id="navyBtn" class="toggle" aria-pressed="false" title="ダークブルーモードの切り替え">ダークブルー</button>
     <button id="focusBtn" class="toggle" aria-pressed="false" title="集中モード：色の選択（色のボタン・色の組み合わせ）を隠します（Fキー）">集中モード</button>
     <button id="hideBtn" class="toggle" aria-pressed="false" title="非表示モード：スタート/一時停止・リセット・時間の設定以外を隠します。バーの上にカーソルを止めると「操作を表示」が出ます（Hキー）">非表示モード</button>
   </div>
@@ -431,7 +442,7 @@
         if (typeof d.fade === 'boolean') state.fade = d.fade;
         if (typeof d.glow === 'boolean') state.glow = d.glow;
         if (typeof d.barOnly === 'boolean') state.barOnly = d.barOnly;
-        if (d.theme === 'auto' || d.theme === 'light' || d.theme === 'dark') state.theme = d.theme;
+        if (d.theme === 'auto' || d.theme === 'light' || d.theme === 'dark' || d.theme === 'navy') state.theme = d.theme;
         if (SHAPES.indexOf(d.shape) >= 0) state.shape = d.shape;
         if (typeof d.keepSpace === 'boolean') state.keepSpace = d.keepSpace;
         if (Array.isArray(d.stageColors) && d.stageColors.length === 3 &&
@@ -861,16 +872,24 @@
   // ---- ダークモード ----
   var darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
   function isDark() {
-    return state.theme === 'dark' || (state.theme === 'auto' && !!darkQuery && darkQuery.matches);
+    return state.theme === 'dark' || state.theme === 'navy' || (state.theme === 'auto' && !!darkQuery && darkQuery.matches);
   }
   function applyTheme() {
     if (state.theme === 'auto') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', state.theme);
-    $('themeBtn').classList.toggle('on', isDark());
-    $('themeBtn').setAttribute('aria-pressed', isDark() ? 'true' : 'false');
+    var plainDark = isDark() && state.theme !== 'navy';
+    $('themeBtn').classList.toggle('on', plainDark);
+    $('themeBtn').setAttribute('aria-pressed', plainDark ? 'true' : 'false');
+    $('navyBtn').classList.toggle('on', state.theme === 'navy');
+    $('navyBtn').setAttribute('aria-pressed', state.theme === 'navy' ? 'true' : 'false');
   }
   $('themeBtn').addEventListener('click', function () {
-    state.theme = isDark() ? 'light' : 'dark';
+    state.theme = (isDark() && state.theme !== 'navy') ? 'light' : 'dark';
+    save();
+    applyTheme();
+  });
+  $('navyBtn').addEventListener('click', function () {
+    state.theme = state.theme === 'navy' ? 'light' : 'navy';
     save();
     applyTheme();
   });
