@@ -198,6 +198,22 @@
     display: flex; flex-wrap: wrap; gap: 10px 16px; justify-content: center; align-items: center;
   }
 
+  /* ---- お気に入り／色のパレット／マイカラー ---- */
+  .cpanel > div { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+  .stagetab { padding: 6px 10px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+  .stagetab i { display: block; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(128,128,128,.45); }
+  .stagetab.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
+  .pal { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
+  .pal.active { border-color: var(--text); }
+  .mc { display: inline-flex; align-items: center; gap: 2px; }
+  .mc-x { padding: 0 6px; font-size: 12px; line-height: 1.7; min-width: 0; border-radius: 999px; }
+  .favtitle { margin-top: 16px; }
+  .fcard { display: flex; flex-direction: column; gap: 6px; width: 150px; align-items: stretch; }
+  .fcard .pcard { width: 100%; }
+  .fbtns { display: flex; gap: 4px; justify-content: center; }
+  .fbtns .tiny { white-space: nowrap; padding: 6px 8px; }
+  .pcard:disabled .pstrip i { background: rgba(128,128,128,.28) !important; }
+
   /* ---- バーのみモード（残り時間の数字を隠す） ---- */
   body.baronly .readout { display: none; }
   .setbadge { display: none; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
@@ -405,6 +421,9 @@
     <div class="cs-title">進行度に応じた色の組み合わせ</div>
     <div class="cs-note">左の色から順に、残りが「多い → 中間 → 少ない」のときの色です。</div>
     <div class="pgrid" id="pgrid" role="group" aria-label="色の組み合わせ"></div>
+    <div class="cs-title favtitle">お気に入り</div>
+    <div class="cs-note">自分で決めた色の組み合わせを2つまで保存できます。保存したカードをタップすると呼び出せます。</div>
+    <div class="pgrid" id="favgrid" role="group" aria-label="お気に入りの色の組み合わせ"></div>
     <button class="custombtn toggle" id="customBtn" aria-expanded="false" aria-controls="customPanel"
             title="3つの色を自由に選びます">
       <span class="cdots" id="cdots"><i></i><i></i><i></i></span>
@@ -412,10 +431,22 @@
       <span class="inuse" id="inuse" hidden>✓ カスタム使用中</span>
     </button>
     <div class="cpanel" id="customPanel" hidden>
-      <label class="stage">残り多い（50%超）<input type="color" id="stage0"></label>
-      <label class="stage">中間（25〜50%）<input type="color" id="stage1"></label>
-      <label class="stage">残り少ない（25%以下）<input type="color" id="stage2"></label>
-      <button class="tiny" id="stageReset" title="既定（緑・黄・赤）に戻す">既定に戻す</button>
+      <div class="cs-note" style="margin:0">変えたい段階を選んでから、色を選びます。</div>
+      <div id="stageTabs" role="group" aria-label="色を変える段階">
+        <button class="stagetab" data-i="0"><i></i>残り多い（50%超）</button>
+        <button class="stagetab" data-i="1"><i></i>中間（25〜50%）</button>
+        <button class="stagetab" data-i="2"><i></i>残り少ない（25%以下）</button>
+      </div>
+      <div id="palette" role="group" aria-label="色を選ぶ"></div>
+      <div id="mycolorRow">
+        <span class="stagelabel">マイカラー</span>
+        <span id="myList" style="display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center"></span>
+        <button class="tiny" id="myAdd" title="いま選んでいる色を保存します（5個まで）">＋この色を保存</button>
+      </div>
+      <div id="selfRow">
+        <label class="stage">自分で色を作る<input type="color" id="stagePick"></label>
+        <button class="tiny" id="stageReset" title="既定（緑・黄・赤）に戻す">既定に戻す</button>
+      </div>
     </div>
   </div>
   <div class="row optrow" id="shapeRow" role="group" aria-label="バーの形">
@@ -460,7 +491,9 @@
     glow: true,
     stageColors: ['#2fa862', '#f0b323', '#e03b2f'],
     shape: 'scale',   // バーの形：scale（目盛りバー）／block（ブロック）／round（丸いバー）
-    keepSpace: true   // 非表示モードで、隠した部分を空白にして画面の大きさを保つ
+    keepSpace: true,  // 非表示モードで、隠した部分を空白にして画面の大きさを保つ
+    favs: [null, null],   // お気に入りの色の組み合わせ（2枠）。中身は3色の配列かnull
+    myColors: []          // マイカラー（5個まで）
   };
   var SHAPES = ['scale', 'block', 'round'];
 
@@ -474,7 +507,7 @@
   // ---- 保存と読み込み ----
   function save() {
     try {
-      localStorage.setItem('vtimerBar', JSON.stringify({ setMin: state.setMin, color: state.color, auto: state.auto, sound: state.sound, fade: state.fade, glow: state.glow, barOnly: state.barOnly, theme: state.theme, stageColors: state.stageColors, shape: state.shape, keepSpace: state.keepSpace }));
+      localStorage.setItem('vtimerBar', JSON.stringify({ setMin: state.setMin, color: state.color, auto: state.auto, sound: state.sound, fade: state.fade, glow: state.glow, barOnly: state.barOnly, theme: state.theme, stageColors: state.stageColors, shape: state.shape, keepSpace: state.keepSpace, favs: state.favs, myColors: state.myColors }));
     } catch (e) {}
   }
   function load() {
@@ -491,6 +524,11 @@
         if (d.theme === 'auto' || d.theme === 'light' || d.theme === 'dark' || d.theme === 'navy') state.theme = d.theme;
         if (SHAPES.indexOf(d.shape) >= 0) state.shape = d.shape;
         if (typeof d.keepSpace === 'boolean') state.keepSpace = d.keepSpace;
+        var isHex = function (c) { return /^#[0-9a-fA-F]{6}$/.test(c); };
+        if (Array.isArray(d.favs)) {
+          state.favs = [0, 1].map(function (i) { var f = d.favs[i]; return (Array.isArray(f) && f.length === 3 && f.every(isHex)) ? f.slice() : null; });
+        }
+        if (Array.isArray(d.myColors)) state.myColors = d.myColors.filter(isHex).slice(0, 5);
         if (Array.isArray(d.stageColors) && d.stageColors.length === 3 &&
             d.stageColors.every(function (c) { return /^#[0-9a-fA-F]{6}$/.test(c); })) state.stageColors = d.stageColors;
       }
@@ -867,7 +905,11 @@
     { id: 'dusk',     name: '夕焼け',       desc: '青紫 → 桃 → 橙', colors: ['#6a5ae0', '#e0559c', '#f59e0b'] }
   ];
   var defaultStage = stagePresets[0].colors;
-  var stageInputs = [$('stage0'), $('stage1'), $('stage2')];
+  // 色を選ぶためのパレット（12色）
+  var PALETTE = ['#2fa862', '#7bc043', '#f0b323', '#f08a24', '#e03b2f', '#e0559c',
+                 '#a03ad0', '#6a5ae0', '#2f7be0', '#3bb5e8', '#1fa89a', '#78909c'];
+  var editStage = 0;   // いま色を変えている段階（0=残り多い／1=中間／2=残り少ない）
+  var stagePick = $('stagePick'), palBtns = [], favBtns = [];
   var presetBtns = [];
 
   function sameColors(a, b) {
@@ -878,10 +920,15 @@
     for (var i = 0; i < stagePresets.length; i++) {
       if (sameColors(state.stageColors, stagePresets[i].colors)) return stagePresets[i].id;
     }
-    return null; // どのプリセットとも違う＝カスタム
+    for (var j = 0; j < 2; j++) {
+      if (state.favs[j] && sameColors(state.stageColors, state.favs[j])) return 'fav' + j;
+    }
+    return null; // どのプリセット・お気に入りとも違う＝カスタム
   }
+  // 色の入力欄の値を、いま変えている段階の色に合わせる（入力中は触らない）
   function syncStageInputs() {
-    for (var i = 0; i < 3; i++) stageInputs[i].value = state.stageColors[i];
+    stagePick.value = state.stageColors[editStage];
+    renderStageEditor();
   }
   function applyStageColors(cols) {
     state.stageColors = cols.slice();
@@ -907,6 +954,108 @@
     presetBtns.push(b);
   });
 
+  // お気に入り（2枠）：タップで呼び出し、「保存」で今の色の組み合わせを登録する
+  function stripHtml(cols) {
+    return '<span class="pstrip"><i style="background:' + cols[0] + '"></i><i style="background:' + cols[1] + '"></i><i style="background:' + cols[2] + '"></i></span>';
+  }
+  function renderFavs() {
+    var g = $('favgrid');
+    g.innerHTML = '';
+    favBtns = [];
+    [0, 1].forEach(function (i) {
+      var f = state.favs[i];
+      var wrap = document.createElement('div');
+      wrap.className = 'fcard';
+      var b = document.createElement('button');
+      b.className = 'pcard';
+      b.dataset.id = 'fav' + i;
+      b.setAttribute('aria-pressed', 'false');
+      b.innerHTML = stripHtml(f || ['#888888', '#888888', '#888888']) + '<span class="pname">お気に入り' + (i + 1) + '</span><span class="pdesc">' + (f ? 'タップで呼び出し' : '未登録') + '</span>';
+      if (f) b.addEventListener('click', function () { applyStageColors(f); syncStageInputs(); });
+      else b.disabled = true;
+      var bt = document.createElement('div');
+      bt.className = 'fbtns';
+      var sv = document.createElement('button');
+      sv.className = 'tiny';
+      sv.textContent = f ? '上書き保存' : '今の色を保存';
+      sv.title = '今の色の組み合わせをお気に入り' + (i + 1) + 'に保存します';
+      sv.addEventListener('click', function () { state.favs[i] = state.stageColors.slice(); save(); renderFavs(); renderColorUI(); });
+      bt.appendChild(sv);
+      if (f) {
+        var del = document.createElement('button');
+        del.className = 'tiny';
+        del.textContent = '消す';
+        del.addEventListener('click', function () { state.favs[i] = null; save(); renderFavs(); renderColorUI(); });
+        bt.appendChild(del);
+      }
+      wrap.appendChild(b); wrap.appendChild(bt);
+      g.appendChild(wrap);
+      favBtns.push(b);
+    });
+  }
+
+  // パレット（12色）を作る
+  var paletteEl = $('palette');
+  PALETTE.forEach(function (c) {
+    var b = document.createElement('button');
+    b.className = 'pal';
+    b.dataset.color = c;
+    b.style.background = c;
+    b.setAttribute('aria-label', '色を選ぶ ' + c);
+    b.addEventListener('click', function () { setStageColor(c); });
+    paletteEl.appendChild(b);
+    palBtns.push(b);
+  });
+  function setStageColor(c) {
+    var cols = state.stageColors.slice();
+    cols[editStage] = c;
+    applyStageColors(cols);
+    stagePick.value = c;
+  }
+  // 色を変える段階の切り替え・パレットの選択表示・マイカラーの一覧
+  function renderStageEditor() {
+    var tabs = document.querySelectorAll('.stagetab');
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle('on', i === editStage);
+      tabs[i].firstElementChild.style.background = state.stageColors[i];
+    }
+    var cur = String(state.stageColors[editStage]).toLowerCase();
+    palBtns.forEach(function (b) { b.classList.toggle('active', b.dataset.color.toLowerCase() === cur); });
+    var list = $('myList');
+    list.innerHTML = '';
+    state.myColors.forEach(function (c, idx) {
+      var s = document.createElement('span');
+      s.className = 'mc';
+      var b = document.createElement('button');
+      b.className = 'pal' + (c.toLowerCase() === cur ? ' active' : '');
+      b.style.background = c;
+      b.setAttribute('aria-label', 'マイカラー ' + c);
+      b.addEventListener('click', function () { setStageColor(c); });
+      var x = document.createElement('button');
+      x.className = 'mc-x';
+      x.textContent = '×';
+      x.title = 'このマイカラーを消す';
+      x.setAttribute('aria-label', 'マイカラーを消す');
+      x.addEventListener('click', function () { state.myColors.splice(idx, 1); save(); renderStageEditor(); });
+      s.appendChild(b); s.appendChild(x);
+      list.appendChild(s);
+    });
+    if (!state.myColors.length) { var e = document.createElement('span'); e.className = 'cs-note'; e.style.margin = '0'; e.textContent = '（まだありません）'; list.appendChild(e); }
+    $('myAdd').disabled = state.myColors.length >= 5;
+    $('myAdd').textContent = state.myColors.length >= 5 ? '5個まで（×で消せます）' : '＋この色を保存';
+  }
+  document.querySelectorAll('.stagetab').forEach(function (t) {
+    t.addEventListener('click', function () { editStage = Number(t.dataset.i); syncStageInputs(); });
+  });
+  $('myAdd').addEventListener('click', function () {
+    var c = String(state.stageColors[editStage]).toLowerCase();
+    if (state.myColors.length >= 5) return;
+    if (state.myColors.some(function (m) { return m.toLowerCase() === c; })) return;
+    state.myColors.push(c);
+    save();
+    renderStageEditor();
+  });
+
   // 選択状態・カスタム使用中の表示を更新する（色の入力欄の値は触らない）
   function renderColorUI() {
     var id = currentPresetId();
@@ -918,8 +1067,14 @@
     var custom = id === null;
     $('customBtn').classList.toggle('on', custom);
     $('inuse').hidden = !custom;
+    favBtns.forEach(function (b) {
+      var on = b.dataset.id === id;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
     var dots = $('cdots').children;
     for (var i = 0; i < 3; i++) dots[i].style.background = state.stageColors[i];
+    renderStageEditor();
     $('colorSet').classList.toggle('dim', !state.auto);
   }
 
@@ -931,12 +1086,11 @@
     $('customBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
     if (open) syncStageInputs();
   });
-  stageInputs.forEach(function (inp, idx) {
-    inp.addEventListener('input', function () {
-      var cols = state.stageColors.slice();
-      cols[idx] = inp.value;
-      applyStageColors(cols);
-    });
+  // 自分で色を作る（サブ機能）：いま選んでいる段階の色を、好きな色に変える
+  stagePick.addEventListener('input', function () {
+    var cols = state.stageColors.slice();
+    cols[editStage] = stagePick.value;
+    applyStageColors(cols);
   });
   $('stageReset').addEventListener('click', function () {
     applyStageColors(defaultStage);
@@ -1278,6 +1432,7 @@
   $('fadeChk').checked = state.fade;
   $('glowChk').checked = state.glow;
   $('keepChk').checked = state.keepSpace;
+  renderFavs();
   syncStageInputs();
   renderColorUI();
   applyTheme();
