@@ -154,6 +154,25 @@
   .notehint { font-size: 12.5px; color: var(--sub); margin: 6px auto 0; max-width: 34em; line-height: 1.6; }
   .notehint:empty { display: none; }
 
+  /* ---- 横画面（スマホを横にしたとき） ---- */
+  @media (orientation: landscape) and (max-height: 600px) {
+    body { display: block; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    .app { max-width: none; margin: 0; border-radius: 0; box-shadow: none; padding: 0 14px 28px; min-height: 0 !important; }
+    /* 1画面目：数字とバーだけが、画面の高さにちょうど収まるように並ぶ */
+    .vstage {
+      min-height: 100vh; min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+      display: flex; flex-direction: column; justify-content: center; padding: 6px 0; cursor: pointer;
+      --rd: min(22dvh, 11vw);
+    }
+    .readout { font-size: var(--rd); margin: 0; }
+    .pomocount { font-size: min(7dvh, 4vw); }
+    .vstage .bar { margin: min(2dvh, 12px) 0 0; padding: min(3dvh, 14px); }
+    .vstage .seg { max-height: calc(100vh - var(--rd) - 60px); max-height: calc(100dvh - var(--rd) - 60px); }
+    body.baronly .vstage .seg { max-height: calc(100vh - 100px); max-height: calc(100dvh - 100px); }
+    body.baronly .setbadge { margin: 4px 0 min(1.5dvh, 8px); font-size: min(10dvh, 6vw); }
+    body.hideui.baronly .setbadge { font-size: min(10dvh, 6vw); }
+  }
+
   /* ---- スマホ向け ---- */
   #miniBtn { display: none !important; }
   body.hideui #fsBtn { display: none; }
@@ -370,11 +389,13 @@
       <div class="row"><button id="pomoYes">はい</button><button id="pomoNo" class="primary" style="min-width:0">いいえ</button></div>
     </div>
   </div>
+  <div class="vstage" id="vstage">
   <div class="readwrap"><div class="readout" id="readout">25:00</div><span class="pomocount" id="pomoCount" title="ポモドーロ：今のセット／全セット数"></span></div>
   <div class="setbadge" id="setBadge" title="設定した時間">25分</div>
 
   <div class="bar" id="bar" role="group" aria-label="残り時間の目盛り">
     <button class="minitoggle" id="miniToggle" aria-expanded="false" aria-controls="mainRow">操作を表示</button>
+  </div>
   </div>
   <div class="scale">
     <span>終了</span>
@@ -1451,6 +1472,13 @@
     document.addEventListener('webkitfullscreenchange', sync);
     sync();
   })();
+
+  // 横画面では、数字とバーの部分をタップして、スタート／一時停止（ポモドーロの次の操作も）ができる
+  $('vstage').addEventListener('click', function (e) {
+    if (!(window.matchMedia && window.matchMedia('(orientation: landscape) and (max-height: 600px)').matches)) return;
+    if (e.target.closest && e.target.closest('button')) return;
+    mainAction();
+  });
 
   load();
   applyShape();
