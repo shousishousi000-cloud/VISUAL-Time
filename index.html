@@ -156,6 +156,7 @@
 
   /* ---- スマホ向け ---- */
   #miniBtn { display: none !important; }
+  body.hideui #fsBtn { display: none; }
   .minitoggle { display: none !important; }   /* スマホ版では「操作を表示」は出さない（非表示モードのボタンをもう一度押して戻す） */
   body { padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); -webkit-tap-highlight-color: transparent; }
   button, input[type=range] { touch-action: manipulation; }
@@ -390,6 +391,7 @@
     <button id="barOnlyBtn" class="toggle" aria-pressed="false" title="バーのみモード：残り時間の数字を隠し、バーだけで経過を見ます（Bキー）">バーのみ</button>
     <button id="themeBtn" class="toggle" aria-pressed="false" title="ダークモードの切り替え">ダーク</button>
     <button id="navyBtn" class="toggle" aria-pressed="false" title="ダークブルーモードの切り替え">ダークブルー</button>
+    <button id="fsBtn" class="toggle" aria-pressed="false" title="全画面モード：ブラウザのバーを隠して画面いっぱいに表示します">全画面</button>
     <button id="colorBtn" class="toggle" aria-pressed="false" title="色選択：色のボタンと色の組み合わせを表示／非表示します（Cキー）">色選択</button>
     <button id="hideBtn" class="toggle" aria-pressed="false" title="非表示モード：スタート/一時停止・リセット・時間の設定以外を隠します。バーの上にカーソルを止めると「操作を表示」が出ます（Hキー）">非表示モード</button>
   </div>
@@ -1425,6 +1427,31 @@
 
   // ---- 初期化 ----
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(function () {});
+  // ---- 全画面モード（アドレスバーやステータスバーを隠して、画面いっぱいに表示する） ----
+  (function () {
+    var btn = $('fsBtn'), root = document.documentElement;
+    var req = root.requestFullscreen || root.webkitRequestFullscreen;
+    if (!req || (document.fullscreenEnabled === false)) { btn.hidden = true; return; }   // 全画面にできない端末（iPhoneなど）ではボタンを出さない
+    function cur() { return document.fullscreenElement || document.webkitFullscreenElement; }
+    function sync() {
+      var on = !!cur();
+      btn.classList.toggle('on', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.textContent = on ? '全画面を解除' : '全画面';
+    }
+    btn.addEventListener('click', function () {
+      try {
+        var r;
+        if (cur()) r = (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+        else r = req.call(root, { navigationUI: 'hide' });
+        if (r && r.catch) r.catch(function () {});
+      } catch (e) {}
+    });
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
+    sync();
+  })();
+
   load();
   applyShape();
   $('autoChk').checked = state.auto;
