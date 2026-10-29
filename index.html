@@ -82,12 +82,16 @@
     transition: background .2s, box-shadow .2s;
   }
   /* ---- バーの形（3種類）：目盛りバー／ブロック（前回の形）／丸いバー（以前の形） ---- */
-  body.shape-scale { --sh: 1.6; }   /* 目盛りバーの縦横比（以前は1.9。少し縦を縮めた） */
-  body.shape-block { --sh: 1.45; }
+  /* 3つの形は、目盛り1つの縦の長さをそろえる（丸いバーの縦の長さが基準）。
+     丸いバー＝円、ブロック＝正方形（どちらも縦横比1）。目盛りバーは隙間が小さく目盛りが少し横に広いので、
+     縦の長さが丸いバーとほぼ同じになる縦横比（約0.93）にしている */
+  body.shape-scale { --sh: 0.93; }
+  body.shape-block { --sh: 1; }
   body.shape-round { --sh: 1; }
   body.shape-scale .bar { gap: 2px; padding: 10px 12px; border-radius: 10px; }
   body.shape-scale .seg { border-radius: 2px; }
   body.shape-block .seg, body.shape-round .seg { border-radius: 6px; }
+  body.shape-round:not(.mini) .seg { border-radius: 50%; }   /* 丸いバーは円 */
   body.mini.shape-scale .bar { gap: min(.3vw, 1px); border-radius: 8px; }
   body.mini.shape-scale .seg { border-radius: 2px; }
   /* 形の選択ボタンの絵 */
@@ -95,8 +99,8 @@
   .shp { display: inline-flex; align-items: center; height: 16px; }
   .shp i { display: block; background: currentColor; opacity: .8; }
   .shp-scale i { width: 3px; height: 16px; margin-right: 1px; border-radius: 1px; }
-  .shp-block i { width: 5px; height: 14px; margin-right: 3px; border-radius: 2px; }
-  .shp-round i { width: 8px; height: 8px; margin-right: 3px; border-radius: 3px; }
+  .shp-block i { width: 8px; height: 8px; margin-right: 3px; border-radius: 2px; }
+  .shp-round i { width: 8px; height: 8px; margin-right: 3px; border-radius: 50%; }
   .seg.on {
     background: var(--lit);
     box-shadow: 0 0 10px -1px var(--lit);
@@ -245,7 +249,6 @@
   body.electron.hideui.baronly:not(.mini) .setbadge { font-size: clamp(20px, 4.2vw, 36px); margin: 0 0 8px; }
   body.electron.hideui.baronly:not(.mini) .app { padding-left: 14px; padding-right: 14px; max-width: 1000px; }
   body.electron.hideui.baronly:not(.mini) .bar { padding-left: 10px; padding-right: 10px; }
-  body.baronly:not(.mini) .seg { aspect-ratio: 1 / calc(var(--sh, 1) * 1.3); }   /* バーのみは少しだけ大きく */
   button.toggle.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
 
   /* ---- 小窓モード（数字とバーだけ表示） ---- */
@@ -475,8 +478,8 @@
   <div class="row optrow" id="shapeRow" role="group" aria-label="バーの形">
     <span class="stagelabel">バーの形</span>
     <button class="toggle shapebtn" data-shape="scale" aria-pressed="false" title="細い目盛りが隙間少なく並ぶ形"><span class="shp shp-scale"><i></i><i></i><i></i><i></i><i></i></span>目盛りバー</button>
-    <button class="toggle shapebtn" data-shape="block" aria-pressed="false" title="縦長の角丸ブロック（前回の形）"><span class="shp shp-block"><i></i><i></i><i></i></span>ブロック</button>
-    <button class="toggle shapebtn" data-shape="round" aria-pressed="false" title="四角い角丸の目盛り（以前の形）"><span class="shp shp-round"><i></i><i></i><i></i></span>丸いバー</button>
+    <button class="toggle shapebtn" data-shape="block" aria-pressed="false" title="角丸の正方形のブロック"><span class="shp shp-block"><i></i><i></i><i></i></span>ブロック</button>
+    <button class="toggle shapebtn" data-shape="round" aria-pressed="false" title="丸い目盛り"><span class="shp shp-round"><i></i><i></i><i></i></span>丸いバー</button>
   </div>
   <div class="row optrow">
     <label class="chk"><input type="checkbox" id="autoChk" checked> 残りに応じて色を変える</label>
