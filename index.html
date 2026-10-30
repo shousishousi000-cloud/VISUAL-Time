@@ -107,6 +107,8 @@
   }
   .seg.on.cur { animation: cur 1s ease-in-out infinite alternate; }
   @keyframes cur { from { opacity: 1; } to { opacity: .5; } }
+  .seg.filling { background: var(--lit); animation: fillpulse 1s ease-in-out infinite alternate; }
+  @keyframes fillpulse { from { opacity: .12; } to { opacity: .6; } }
   .done .seg.on { animation: doneflash .6s ease-in-out infinite alternate; }
   @keyframes doneflash { from { opacity: 1; } to { opacity: .2; } }
   .scale {
@@ -147,6 +149,7 @@
   body.noglow .seg.on { box-shadow: none; }
   body.nofade .seg { transition: none; }
   body.nofade .seg.on.cur { animation: none; }
+  body.nofade .seg.filling { animation: none; background: var(--off); opacity: 1; }
   .stagelabel { font-size: 14px; color: var(--sub); }
   .stage { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--sub); }
   .stage input[type=color] {
@@ -629,7 +632,8 @@
 
     for (var i = 0; i < N; i++) {
       segs[i].classList.toggle('on', i < lit);
-      segs[i].classList.toggle('cur', state.running && !state.done && i === lit - 1);
+      segs[i].classList.toggle('cur', state.running && !state.done && !cu.on && i === lit - 1);
+      segs[i].classList.toggle('filling', cu.on && state.running && !state.done && i === lit);   // カウントアップ：いま増えている途中のブロックをうっすら点滅させる
     }
 
     readout.textContent = shownTime(state.remainSec);
