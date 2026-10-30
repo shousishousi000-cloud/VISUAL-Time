@@ -242,6 +242,11 @@
   .fbtns .tiny { white-space: nowrap; padding: 6px 8px; }
   .pcard:disabled .pstrip i { background: rgba(128,128,128,.28) !important; }
 
+  /* ---- 数字を隠すモード：今が何分のタイマーか分からなくする ---- */
+  body.nonum .readout, body.nonum .setbadge, body.nonum .pomocount, body.nonum .scale,
+  body.nonum #timeAdj, body.nonum #timeSlider, body.nonum #presets, body.nonum #cuRow { display: none !important; }
+  body.nonum #hint.numtxt { visibility: hidden; }
+  #numBtn.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
   /* ---- バーのみモード（残り時間の数字を隠す） ---- */
   body.baronly .readout { display: none; }
   .setbadge { display: none; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
@@ -427,6 +432,7 @@
     <button id="navyBtn" class="toggle" aria-pressed="false" title="ダークブルーモードの切り替え">ダークブルー</button>
     <button id="fsBtn" class="toggle" aria-pressed="false" title="全画面モード：ブラウザのバーを隠して画面いっぱいに表示します">全画面</button>
     <button id="colorBtn" class="toggle" aria-pressed="false" title="色選択：色のボタンと色の組み合わせを表示／非表示します（Cキー）">色選択</button>
+    <button id="numBtn" class="toggle" aria-pressed="false" title="数字を隠す：残り時間・設定時間・目盛りの分数をすべて隠し、何分のタイマーか分からなくします（Nキー）">数字を隠す</button>
     <button id="hideBtn" class="toggle" aria-pressed="false" title="非表示モード：スタート/一時停止・リセット・時間の設定以外を隠します。バーの上にカーソルを止めると「操作を表示」が出ます（Hキー）">非表示モード</button>
   </div>
 
@@ -637,7 +643,7 @@
     }
 
     readout.textContent = shownTime(state.remainSec);
-    document.title = (state.running && !state.barOnly ? shownTime(state.remainSec) + ' ' : '') + 'ビジュアルタイマー（横型）';
+    document.title = (state.running && !state.barOnly && !state.numHide ? shownTime(state.remainSec) + ' ' : '') + 'ビジュアルタイマー（横型）';
     var mp = $('miniPlay');
     mp.dataset.state = state.running ? 'run' : 'idle';
     var mpLabel = state.running ? '一時停止' : (state.remainSec < state.setSec && state.remainSec > 0 ? '再開' : 'スタート');
@@ -898,7 +904,19 @@
     return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
   }
   // 画面に出す時間：通常は残り、カウントアップは経過
-  function shownTime(remain) { return cu.on ? fmtUp(state.setSec - remain) : fmt(remain); }
+  function shownTime(remain) { return state.numHide ? '??:??' : (cu.on ? fmtUp(state.setSec - remain) : fmt(remain)); }
+  // 数字を隠すモード（保存しない：開くたびに通常に戻る）
+  function setNumHide(on) {
+    state.numHide = !!on;
+    document.body.classList.toggle('nonum', state.numHide);
+    $('numBtn').classList.toggle('on', state.numHide);
+    $('numBtn').setAttribute('aria-pressed', state.numHide ? 'true' : 'false');
+    render();
+    hintMask();
+  }
+  function hintMask() { hint.classList.toggle('numtxt', !!state.numHide && /[0-9０-９]/.test(hint.textContent)); }
+  new MutationObserver(hintMask).observe(hint, { childList: true, characterData: true, subtree: true });
+  $('numBtn').addEventListener('click', function () { setNumHide(!state.numHide); this.blur(); });
   // 点灯するブロックの数：通常は「残り」、カウントアップは「経過」ぶん（左から増える）
   function cuLit(lit) { return (cu.on && !state.done) ? N - lit : lit; }
   // 色：通常（緑→黄→赤）とは逆に、増えるにつれて 赤→黄→緑 と進む（色の組み合わせは通常と同じものを使う）
@@ -1013,6 +1031,7 @@
     else if (e.key === 'r' || e.key === 'R') reset();
     else if (e.key === 'm' || e.key === 'M') setMini(!mini);
     else if (e.key === 'b' || e.key === 'B') setBarOnly(!state.barOnly);
+    else if (e.key === 'n' || e.key === 'N') setNumHide(!state.numHide);
     else if (e.key === 'h' || e.key === 'H') { if (mini) setMiniControls(!miniCtrlHidden); else setUiHidden(!uiHidden); }
     else if (e.key === 'c' || e.key === 'C') setColorPick(!colorPick);
     else if (e.key === 'p' || e.key === 'P') togglePomodoro();
@@ -1410,13 +1429,13 @@
     }
     function bodyText(s) {
       var t = shownTime(s.remain), line1, line3;
-      if (s.status === 'running') { line1 = '▶ 計測中　' + (cu.on ? '経過 ' : '残り ') + t; line3 = '終了予定 ' + hhmm(state.endAt) + '（' + state.setMin + '分タイマー）'; }
-      else if (s.status === 'paused') { line1 = '⏸ 一時停止中　' + (cu.on ? '経過 ' : '残り ') + t; line3 = state.setMin + '分タイマー'; }
+      if (s.status === 'running') { line1 = '▶ 計測中　' + (cu.on ? '経過 ' : '残り ') + t; line3 = (state.numHide ? '' : '終了予定 ' + hhmm(state.endAt)) + (state.numHide ? '' : '（' + state.setMin + '分タイマー）'); }
+      else if (s.status === 'paused') { line1 = '⏸ 一時停止中　' + (cu.on ? '経過 ' : '残り ') + t; line3 = (state.numHide ? 'タイマー' : state.setMin + '分タイマー'); }
       else if (s.status === 'done') {
         if (pomo.on && pomo.pending) { line1 = '⏰ ' + pomoDoneText(); line3 = 'ポモドーロ ' + pomo.cur + '/' + pomo.sets + '（アプリを開いて次へ進めます）'; }
-        else { line1 = '⏰ 時間です（終了）'; line3 = state.setMin + '分タイマーが終わりました'; }
+        else { line1 = '⏰ 時間です（終了）'; line3 = (state.numHide ? 'タイマーが終わりました' : state.setMin + '分タイマーが終わりました'); }
       }
-      else { line1 = '⏹ 待機中　' + t; line3 = state.setMin + '分タイマー'; }
+      else { line1 = '⏹ 待機中　' + t; line3 = (state.numHide ? 'タイマー' : state.setMin + '分タイマー'); }
       if (pomo.on && s.status !== 'done') line3 = 'ポモドーロ ' + (pomo.phase === 'break' ? '休憩 ' : '') + pomo.cur + '/' + pomo.sets + '　' + line3;
       return line1 + '\n' + blocks(s) + '\n' + line3;
     }
@@ -1448,7 +1467,7 @@
         g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.fill();
       }
       g.fillStyle = sub; g.font = '500 30px ' + fam;
-      g.fillText(s.status === 'running' ? '終了予定 ' + hhmm(state.endAt) + '　/　設定 ' + state.setMin + '分' : '設定 ' + state.setMin + '分', 400, 372);
+      g.fillText(state.numHide ? '' : s.status === 'running' ? '終了予定 ' + hhmm(state.endAt) + '　/　設定 ' + state.setMin + '分' : '設定 ' + state.setMin + '分', 400, 372);
       return c.toDataURL('image/png');
     }
 
