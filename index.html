@@ -154,6 +154,7 @@
     border: 1px solid rgba(128,128,128,.35); border-radius: 8px; background: transparent;
   }
   .tiny { padding: 6px 10px; font-size: 13px; }
+  .cuadj { min-width: 52px; padding: 6px 10px; font-size: 14px; }
   [hidden] { display: none !important; }
   .notehint { font-size: 12.5px; color: var(--sub); margin: 6px auto 0; max-width: 34em; line-height: 1.6; }
   .notehint:empty { display: none; }
@@ -347,6 +348,11 @@
   .pdlg .box { background: var(--panel); color: var(--text); border-radius: 18px; padding: 22px 24px; max-width: 320px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,.4); text-align: center; }
   .pdlg p { margin: 0 0 16px; font-size: 17px; font-weight: 700; }
   .pdlg .row { margin-top: 0; }
+  #cuRow { display: none; }
+  body.cu #cuRow { display: flex; }
+  body.mini #cuRow, body.mini #cuBtn { display: none; }
+  body.cu #timeAdj, body.cu #timeSlider, body.cu #presets { display: none; }
+  #cuBtn.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
   #pomoRow { display: none; }
   body.pomo #pomoRow { display: flex; }
   body.mini #pomoRow { display: none; }
@@ -401,7 +407,7 @@
   </div>
   </div>
   <div class="scale">
-    <span>終了</span>
+    <span id="minLabel">終了</span>
     <span id="segInfo">1目盛り＝1分15秒</span>
     <span id="maxLabel">25分</span>
   </div>
@@ -412,6 +418,7 @@
     <button id="resetBtn">リセット</button>
     <button id="miniBtn" title="数字とバーだけの小さな表示にします（Mキー）">小窓モード</button>
     <button id="pomoBtn" class="toggle" aria-pressed="false" title="ポモドーロ：25分＋5分の休憩を、決めた回数だけ繰り返します（Pキー）">ポモドーロ</button>
+    <button id="cuBtn" class="toggle" aria-pressed="false" title="カウントアップ：0からバーが左から増えていきます。1ブロックが何分かを3〜10分で決められます">カウントアップ</button>
     <button id="barOnlyBtn" class="toggle" aria-pressed="false" title="バーのみモード：残り時間の数字を隠し、バーだけで経過を見ます（Bキー）">バーのみ</button>
     <button id="themeBtn" class="toggle" aria-pressed="false" title="ダークモードの切り替え">ダーク</button>
     <button id="navyBtn" class="toggle" aria-pressed="false" title="ダークブルーモードの切り替え">ダークブルー</button>
@@ -432,6 +439,14 @@
   </div>
 
   <div class="row" id="presets"></div>
+  <div class="row" id="cuRow" role="group" aria-label="カウントアップの設定">
+    <span class="setlabel">1ブロック</span>
+    <button class="cuadj" id="cuMinus" aria-label="1ブロックの時間を1分短くする">−1分</button>
+    <input type="range" id="cuSlider" min="3" max="10" step="1" value="5" aria-label="1ブロックの時間（3〜10分）">
+    <button class="cuadj" id="cuPlus" aria-label="1ブロックの時間を1分長くする">＋1分</button>
+    <span class="setlabel" id="cuVal">5分</span>
+    <span class="hint" style="margin:0" id="cuTotal">全体 50分</span>
+  </div>
   <div class="row" id="pomoRow" role="group" aria-label="ポモドーロのセット数">
     <span class="setlabel">セット数</span>
     <button class="pset" data-sets="1">1回</button>
@@ -533,7 +548,7 @@
   // ---- 保存と読み込み ----
   function save() {
     try {
-      localStorage.setItem('vtimerBar', JSON.stringify({ setMin: state.setMin, color: state.color, auto: state.auto, sound: state.sound, fade: state.fade, glow: state.glow, barOnly: state.barOnly, theme: state.theme, stageColors: state.stageColors, shape: state.shape, keepSpace: state.keepSpace, favs: state.favs, myColors: state.myColors }));
+      localStorage.setItem('vtimerBar', JSON.stringify({ setMin: (cu.on ? cu.prevMin : (pomo.on ? pomo.prevMin : state.setMin)), color: state.color, auto: state.auto, sound: state.sound, fade: state.fade, glow: state.glow, barOnly: state.barOnly, theme: state.theme, stageColors: state.stageColors, shape: state.shape, keepSpace: state.keepSpace, favs: state.favs, myColors: state.myColors }));
     } catch (e) {}
   }
   function load() {
@@ -607,6 +622,8 @@
     var lit = litCount(state.remainSec);
     var litColor = litColorFor(state.remainSec);
     litColor = pomoColor(litColor);
+    litColor = cuColor(litColor, state.remainSec);
+    lit = cuLit(lit);
     document.documentElement.style.setProperty('--lit', litColor);
     document.documentElement.style.setProperty('--accent', state.auto ? '#2f7be0' : state.color);
 
@@ -615,8 +632,8 @@
       segs[i].classList.toggle('cur', state.running && !state.done && i === lit - 1);
     }
 
-    readout.textContent = fmt(state.remainSec);
-    document.title = (state.running && !state.barOnly ? fmt(state.remainSec) + ' ' : '') + 'ビジュアルタイマー（横型）';
+    readout.textContent = shownTime(state.remainSec);
+    document.title = (state.running && !state.barOnly ? shownTime(state.remainSec) + ' ' : '') + 'ビジュアルタイマー（横型）';
     var mp = $('miniPlay');
     mp.dataset.state = state.running ? 'run' : 'idle';
     var mpLabel = state.running ? '一時停止' : (state.remainSec < state.setSec && state.remainSec > 0 ? '再開' : 'スタート');
@@ -639,6 +656,7 @@
       sw[k].classList.toggle('active', !state.auto && sw[k].dataset.color === state.color);
     }
     renderPomo();
+    renderCu();
     app.classList.toggle('done', state.done);
     document.body.classList.toggle('nofade', !state.fade);
     document.body.classList.toggle('noglow', !state.glow);
@@ -702,7 +720,7 @@
       state.remainSec = 0;
       stop();
       state.done = true;
-      if (pomo.on) pomoPhaseEnded(); else hint.textContent = '時間です。リセットで元の時間に戻ります';
+      if (pomo.on) pomoPhaseEnded(); else hint.textContent = cu.on ? '目標の時間になりました。リセットで0に戻ります' : '時間です。リセットで元の時間に戻ります';
       beep(3);
       try { if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 400]); } catch (e) {}
     } else {
@@ -832,7 +850,7 @@
     });
   }
   function togglePomodoro() {
-    if (!pomo.on) { enterPomodoro(); return; }
+    if (!pomo.on) { if (cu.on) return; enterPomodoro(); return; }
     if (pomoAsking) return;
     pomoAsking = true;
     askPomoEnd().then(function (ok) { pomoAsking = false; if (ok && pomo.on) exitPomodoro(); },
@@ -867,6 +885,80 @@
   Array.prototype.forEach.call(document.querySelectorAll('.pset'), function (b) {
     b.addEventListener('click', function () { if (pomoFresh()) { pomo.sets = Number(b.dataset.sets); render(); } });
   });
+
+  // ---- カウントアップ（0からバーが左から増える。何分で1ブロックかは3〜10分で決める） ----
+  var cu = { on: false, per: 5, prevMin: 25 };
+  function fmtUp(sec) {
+    sec = Math.max(0, Math.floor(sec + 1e-6));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  // 画面に出す時間：通常は残り、カウントアップは経過
+  function shownTime(remain) { return cu.on ? fmtUp(state.setSec - remain) : fmt(remain); }
+  // 点灯するブロックの数：通常は「残り」、カウントアップは「経過」ぶん（左から増える）
+  function cuLit(lit) { return (cu.on && !state.done) ? N - lit : lit; }
+  // 色：通常（緑→黄→赤）とは逆に、増えるにつれて 赤→黄→緑 と進む（色の組み合わせは通常と同じものを使う）
+  function cuColor(c, remain) {
+    if (!cu.on) return c;
+    if (!state.auto) return state.color;
+    var e = state.done ? 1 : Math.max(0, Math.min(1, 1 - remain / state.setSec));
+    return e > 0.5 ? state.stageColors[0] : (e > 0.25 ? state.stageColors[1] : state.stageColors[2]);
+  }
+  function cuFresh() { return cu.on && !state.running && !state.done && state.remainSec === state.setSec; }
+  // 目盛りの数×1ブロックの時間が、全体の時間になる（目盛りの数は通常のタイマーと同じ数に従う）
+  function cuRecalc() {
+    if (!cu.on) return;
+    stop();
+    state.done = false;
+    state.setMin = N * cu.per;
+    state.setSec = state.setMin * 60;
+    state.remainSec = state.setSec;
+    hint.textContent = 'カウントアップ：スタートで0からブロックが増えます（' + cu.per + '分で1ブロック・全体' + state.setMin + '分）';
+    render();
+  }
+  function enterCu() {
+    if (pomo.on) return;
+    stop();
+    cu.on = true;
+    cu.prevMin = state.setMin;
+    document.body.classList.add('cu');
+    cuRecalc();
+  }
+  function exitCu() {
+    stop();
+    cu.on = false;
+    state.setMin = cu.prevMin; state.setSec = state.setMin * 60; state.remainSec = state.setSec; state.done = false;
+    document.body.classList.remove('cu');
+    hint.textContent = 'スライダーやボタンで時間を設定できます';
+    render();
+  }
+  function setCuPer(v) {
+    v = Math.max(3, Math.min(10, Math.round(v)));
+    if (!cuFresh()) return;
+    cu.per = v;
+    cuRecalc();
+  }
+  function renderCu() {
+    var on = cu.on;
+    $('cuBtn').classList.toggle('on', on);
+    $('cuBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
+    $('cuBtn').disabled = !on && pomo.on;       // ポモドーロ中は切り替えられない
+    $('pomoBtn').disabled = on;                 // カウントアップ中はポモドーロに切り替えられない
+    $('minLabel').textContent = on ? '開始' : '終了';
+    if (on) {
+      maxLabel.textContent = '目標 ' + state.setMin + '分';
+      var fresh = cuFresh();
+      $('cuSlider').value = cu.per; $('cuSlider').disabled = !fresh;
+      $('cuMinus').disabled = !fresh || cu.per <= 3;
+      $('cuPlus').disabled = !fresh || cu.per >= 10;
+      $('cuVal').textContent = cu.per + '分';
+      $('cuTotal').textContent = '全体 ' + state.setMin + '分（' + N + '個）';
+    }
+  }
+  $('cuBtn').addEventListener('click', function () { if (cu.on) exitCu(); else enterCu(); this.blur(); });
+  $('cuSlider').addEventListener('input', function () { setCuPer(Number($('cuSlider').value)); });
+  $('cuMinus').addEventListener('click', function () { setCuPer(cu.per - 1); });
+  $('cuPlus').addEventListener('click', function () { setCuPer(cu.per + 1); });
 
   // ---- 操作 ----
   startBtn.addEventListener('click', mainAction);
@@ -1284,7 +1376,7 @@
       var remain = state.done ? 0 : (state.running ? Math.max(0, (state.endAt - Date.now()) / 1000) : state.remainSec);
       var status = state.done ? 'done' : state.running ? 'running'
         : (state.remainSec < state.setSec && state.remainSec > 0 ? 'paused' : 'idle');
-      return { remain: remain, status: status, lit: litCount(remain), color: litColorFor(remain) };
+      return { remain: remain, status: status, lit: cuLit(litCount(remain)), color: cuColor(litColorFor(remain), remain) };
     }
     function hhmm(t) {
       var d = new Date(t);
@@ -1313,9 +1405,9 @@
       return out;
     }
     function bodyText(s) {
-      var t = fmt(s.remain), line1, line3;
-      if (s.status === 'running') { line1 = '▶ 計測中　残り ' + t; line3 = '終了予定 ' + hhmm(state.endAt) + '（' + state.setMin + '分タイマー）'; }
-      else if (s.status === 'paused') { line1 = '⏸ 一時停止中　残り ' + t; line3 = state.setMin + '分タイマー'; }
+      var t = shownTime(s.remain), line1, line3;
+      if (s.status === 'running') { line1 = '▶ 計測中　' + (cu.on ? '経過 ' : '残り ') + t; line3 = '終了予定 ' + hhmm(state.endAt) + '（' + state.setMin + '分タイマー）'; }
+      else if (s.status === 'paused') { line1 = '⏸ 一時停止中　' + (cu.on ? '経過 ' : '残り ') + t; line3 = state.setMin + '分タイマー'; }
       else if (s.status === 'done') {
         if (pomo.on && pomo.pending) { line1 = '⏰ ' + pomoDoneText(); line3 = 'ポモドーロ ' + pomo.cur + '/' + pomo.sets + '（アプリを開いて次へ進めます）'; }
         else { line1 = '⏰ 時間です（終了）'; line3 = state.setMin + '分タイマーが終わりました'; }
@@ -1339,7 +1431,7 @@
       var label = { running: '計測中', paused: '一時停止中', done: '時間です', idle: '待機中' }[s.status];
       if (pomo.on) label = (s.status === 'done' && pomo.pending) ? pomoDoneText() : 'ポモドーロ ' + (pomo.phase === 'break' ? '休憩 ' : '') + pomo.cur + '/' + pomo.sets + '　' + label;
       g.fillStyle = sub; g.font = '600 34px ' + fam; g.fillText(label, 400, 62);
-      g.fillStyle = text; g.font = '700 128px ' + fam; g.fillText(fmt(s.remain), 400, 192);
+      g.fillStyle = text; g.font = '700 128px ' + fam; g.fillText(shownTime(s.remain), 400, 192);
       var scaleShape = state.shape === 'scale';
       var x0 = 40, w = 720, gap = scaleShape ? 3 : 6, tw = (w - gap * (N - 1)) / N, y = 236, th = 92;
       for (var i = 0; i < N; i++) {
